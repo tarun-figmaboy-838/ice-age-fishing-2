@@ -29,6 +29,13 @@ decoded as it arrives, so its first frame on screen doesn't stall, and a file th
 one more try before the bar says so and offers Try again. The four big sheets ship as lossless
 WebP copies of their PNG masters (`tools/build-webp.py`; pixel-identical, about 45% smaller).
 
+Phones and tablets: the whole game keeps the same proportions on every screen (the HUD, the
+bubbles and the buttons scale with the scene, exactly as on a computer), fitted inside the
+notch and home bar. A phone or tablet held upright shows the game turned sideways and filling the
+screen, so it plays as soon as the phone is turned, even with rotation lock on; taps are turned
+back to match (`Stage.toStage`). On Android, Play also goes full screen in landscape. Small
+buttons keep a 44px tap area, and double-tap or pinch zoom is off.
+
 Append `?debug` to the URL to expose `window.popoDebug = { state, game }` for testing.
 
 Append `?dev=1` for a small panel of screen jumps (top left): title, intro, each level, the
@@ -178,6 +185,8 @@ Python Playwright with its Chromium (`pip install playwright && playwright insta
 - `python3 tests/asset_alpha.py` – the mishap art's transparency.
 - `python3 tests/voice.py` – every line the game can say has a recorded clip.
 - `python3 tests/stress.py` – rapid taps, pause/resume, restarts mid-scene, CPU throttling, slow loading.
+- `python3 tests/phones.py` – Mac and phone sizes keep the same proportions, phones are filled
+  (sideways when upright), and fish and Pause taps land in both orientations.
 - `python3 tests/loading.py` – the WebP copies match their PNGs; on a slow connection the title
   shows first, the bar fills, an early Play starts the game once loaded, only needed files are
   fetched, and a failed file offers Try again.

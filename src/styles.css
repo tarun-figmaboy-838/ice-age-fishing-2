@@ -17,6 +17,10 @@
 html, body {
   margin: 0;
   height: 100%;
+  overscroll-behavior: none;
+  touch-action: none; /* no double-tap or pinch zoom while tapping fish */
+  -webkit-touch-callout: none;
+  -webkit-text-size-adjust: 100%;
   background: #063a8f;
   color: var(--text);
   font-family: var(--font);
@@ -31,10 +35,22 @@ html, body {
   inset: 0;
   display: grid;
   place-items: center;
+  /* clear of a phone's notch and home bar */
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   background: radial-gradient(circle at 50% 30%, #0f55c4, #052a70 80%);
 }
 
 /* The stage is the 1672x941 design box; 1em inside it is 10 logical pixels. */
+/* A phone held upright: the game turns sideways to fill the screen (stage.js sets the size),
+   so it plays the moment the phone is turned, even with rotation lock on. */
+.app.rotated {
+  right: auto;
+  bottom: auto;
+  padding: 0;
+  transform-origin: 0 0;
+  transform: rotate(90deg) translateY(-100%);
+}
+
 .stage {
   position: relative;
   overflow: hidden;
@@ -42,7 +58,8 @@ html, body {
   /* sized by stage.js; the same fit in CSS covers the moment before the scripts arrive */
   width: min(100vw, calc(100vh * 1672 / 941));
   height: min(100vh, calc(100vw * 941 / 1672));
-  font-size: max(var(--em, min(calc(100vw / 167.2), calc(100vh / 94.1))), 6.2px);
+  /* the same proportions on every screen, a phone's included: everything scales together */
+  font-size: var(--em, min(calc(100vw / 167.2), calc(100vh / 94.1)));
   border-radius: 0.6em;
   box-shadow: 0 2em 6em rgba(0, 0, 0, 0.35);
 }
@@ -146,8 +163,9 @@ html, body {
 
 .icon-btn {
   font: inherit;
-  width: max(5.6em, 44px);
-  height: max(5.6em, 44px);
+  position: relative;
+  width: 5.6em;
+  height: 5.6em;
   border-radius: 50%;
   border: 0.18em solid var(--ink);
   background: linear-gradient(180deg, #ffd860, #ff9a1c);
@@ -160,6 +178,8 @@ html, body {
   padding: 0;
 }
 .icon-btn svg { width: 55%; height: 55%; }
+/* on a phone the drawn button is small, so its tap area reaches out to at least 44px */
+.icon-btn::after { content: ""; position: absolute; inset: min(-0.2em, calc((5.6em - 44px) / 2)); border-radius: 50%; }
 .icon-btn:active { transform: translateY(0.15em) scale(0.94); box-shadow: 0 0.05em 0 var(--ink), 0 0.3em 0.8em rgba(0, 20, 60, 0.28); }
 .icon-btn:focus-visible { outline: 0.3em solid #fff; outline-offset: 0.2em; }
 .icon-btn .mute { display: none; }

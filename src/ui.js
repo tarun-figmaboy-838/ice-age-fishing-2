@@ -4,7 +4,8 @@
 const $ = (id) => document.getElementById(id);
 
 class UI {
-  constructor() {
+  constructor(stage) {
+    this.stage = stage;
     this.el = {
       hud: $('hud'), hits: $('hits'), hand: $('hand'), start: $('screen-start'), loading: $('loading'), loadingText: $('loading-text'), retry: $('btn-retry'), play: $('btn-play'),
       instruction: $('instruction'), instructionText: $('instruction-text'), next: $('btn-next'),
@@ -116,8 +117,7 @@ class UI {
   }
 
   toStage(clientX, clientY) {
-    const r = this.el.hits.getBoundingClientRect();
-    return { x: (clientX - r.left) / this.scale, y: (clientY - r.top) / this.scale };
+    return this.stage.toStage(clientX, clientY);
   }
 
   // The loading bar, from 0 to 1.

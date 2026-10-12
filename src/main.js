@@ -3,11 +3,21 @@
 const { assets, loadTitle, loadCoreAssets, AudioEngine, Game, Stage, state, PHASE, UI } = PopoGame;
 
 const stage = new Stage(document.getElementById('stage'), document.getElementById('world'));
-const ui = new UI();
+const ui = new UI(stage);
 const audio = new AudioEngine();
 const game = new Game({ stage, ui, audio });
 
-ui.on('play', () => game.pressPlay());
+// On a phone or tablet, Play also goes full screen in landscape where the browser allows it.
+function fullScreen() {
+  const el = document.documentElement;
+  const request = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!request || document.fullscreenElement || !window.matchMedia('(pointer: coarse)').matches) return;
+  Promise.resolve(request.call(el, { navigationUI: 'hide' }))
+    .then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape'))
+    .catch(() => { /* not allowed here: the game still fits the screen */ });
+}
+
+ui.on('play', () => { fullScreen(); game.pressPlay(); });
 ui.on('playHover', (on) => game.onPlayHover(on));
 ui.on('playPress', () => game.onPlayPress());
 ui.on('fishTap', (fish, point) => game.onFishTap(fish, point));
@@ -32,6 +42,8 @@ try {
 
 window.addEventListener('pagehide', (event) => { if (!event.persisted) game.dispose(); });
 window.addEventListener('resize', () => game.resize());
+// Safari ignores user-scalable=no, so pinch zoom is stopped here
+document.addEventListener('gesturestart', (e) => e.preventDefault());
 window.addEventListener('orientationchange', () => setTimeout(() => game.resize(), 150));
 // Browsers (Brave and Safari especially) can suspend audio when the tab loses focus or the
 // device sleeps; the next tap or key press brings it back.

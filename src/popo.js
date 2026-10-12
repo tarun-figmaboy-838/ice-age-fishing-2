@@ -155,7 +155,7 @@ class Popo {
     ctx.drawImage(this.mishapArt.rod, -320*.63, -276*.63, 620*.63, 435*.63);
     ctx.restore();
     const data = PopoGame.PERSONALITY_DATA.popo;
-    const k = 196.5 / data.frames[0].height;
+    const k = 183 / data.frames[0].height; // the size of the fishing drawing, so he doesn't grow when he acts
     const breath = this.reduced ? 0 : Math.sin(this.actorTime * 2.2) * .005;
     const [sx, sy, sw, sh] = data.frames[frame].box;
     ctx.save();ctx.translate(o.x, o.y);ctx.scale(1 - breath * .35, 1 + breath);

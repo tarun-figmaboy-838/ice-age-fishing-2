@@ -21,8 +21,21 @@ class Stage {
   }
 
   resize() {
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const app = this.root.parentElement;
+    let vw = window.innerWidth;
+    let vh = window.innerHeight;
+    // a phone or tablet held upright turns the game sideways to fill its screen
+    this.rotated = vh > vw && window.matchMedia('(pointer: coarse)').matches;
+    app.classList.toggle('rotated', this.rotated);
+    app.style.width = this.rotated ? `${vh}px` : '';
+    app.style.height = this.rotated ? `${vw}px` : '';
+    if (this.rotated) {
+      [vw, vh] = [vh, vw];
+    } else {
+      const pad = getComputedStyle(app);
+      vw -= parseFloat(pad.paddingLeft) + parseFloat(pad.paddingRight);
+      vh -= parseFloat(pad.paddingTop) + parseFloat(pad.paddingBottom);
+    }
     this.portrait = vh > vw * 1.15;
     const scale = Math.min(vw / STAGE_W, vh / STAGE_H);
     const w = Math.round(STAGE_W * scale);
@@ -53,7 +66,13 @@ class Stage {
     return this.curtainCtx;
   }
 
+  // A screen point in stage pixels (turned back first when the game is on its side).
   toStage(clientX, clientY) {
+    if (this.rotated) {
+      const x = clientY - this.root.offsetLeft;
+      const y = window.innerWidth - clientX - this.root.offsetTop;
+      return { x: x / this.scale, y: y / this.scale };
+    }
     const r = this.root.getBoundingClientRect();
     return { x: (clientX - r.left) / this.scale, y: (clientY - r.top) / this.scale };
   }
