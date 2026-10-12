@@ -4,7 +4,7 @@
 // Number keys 1–9 and 0 press the buttons in order; ` folds the panel away.
 if (new URLSearchParams(location.search).get('dev') !== '1') return;
 
-const { state, PHASE, LOCATIONS, STORY, matchesTarget, travelTo, discovery, finale } = PopoGame;
+const { state, PHASE, LEVELS, FISH, ShapeFish, PALETTE, finishLevel } = PopoGame;
 
 function game() {
   return window.popoDebug && window.popoDebug.game;
@@ -23,25 +23,33 @@ function begin(g) {
   g.reset();
 }
 
-function atLocation(g, index) {
-  begin(g);
-  state.locationIndex = index;
-  state.challengeIndex = 0;
-  g.applyLocation();
-}
-
 function level(index) {
   const g = game();
-  atLocation(g, index);
-  g.tutorialPending = false;
-  g.setupChallenge();
+  begin(g);
+  g.startLevel(index);
+  g.play();
 }
 
 function tapFish(right) {
   const g = game();
-  if (state.phase !== PHASE.READY) level(state.phase === PHASE.INTRO ? 0 : state.locationIndex);
-  const fish = state.fish.find((f) => !f.gone && !f.offstage && matchesTarget(f.key, state.target) === right);
+  if (state.phase !== PHASE.READY) level(state.phase === PHASE.INTRO ? 0 : state.level);
+  const fish = state.fish.find((f) => !f.gone && !f.offstage && f.correct === right);
   if (fish) g.onFishTap(fish, null);
+}
+
+// A full game's catch, for the basket at the end: the first fish to catch of each level.
+function fullCatch() {
+  return LEVELS.flatMap((lvl, i) => FISH.filter((f) => f.level === i + 1 && f.correct).slice(0, lvl.catches)
+    .map((spec, k) => new ShapeFish(spec, lvl, { colour: PALETTE[(i * 3 + k) % PALETTE.length] })));
+}
+
+// As if level `index`'s last fish had just landed.
+function finish(index) {
+  const g = game();
+  level(index);
+  state.levelCaught = LEVELS[index].catches;
+  if (index === LEVELS.length - 1) state.collected = fullCatch();
+  finishLevel(g);
 }
 
 const JUMPS = [
@@ -53,17 +61,19 @@ const JUMPS = [
     g.showIdleScene();
   }],
   ['Intro', () => { const g = game(); begin(g); g.restart(); }],
-  ...LOCATIONS.map((loc, i) => [`L${i + 1} ${loc.name.split(' ')[0]}`, () => level(i)]),
+  ...LEVELS.map((lvl, i) => [`L${i + 1}`, () => level(i)]),
+  ['Recall', () => finish(3)],
   ['Catch ✓', () => tapFish(true)],
   ['Wrong ✗', () => tapFish(false)],
-  ['Row on', () => {
+  ['Level done', () => finish(state.phase === PHASE.INTRO ? 0 : state.level)],
+  ['Reminder', () => {
     const g = game();
-    const from = state.phase === PHASE.INTRO ? 0 : Math.min(state.locationIndex, LOCATIONS.length - 2);
-    atLocation(g, from);
-    travelTo(g, from + 1);
+    g.learned = false;
+    try { localStorage.removeItem('popo-fishing-learned'); } catch (e) { /* storage may be unavailable */ }
+    begin(g);
+    g.restart();
   }],
-  ['Mystery fish', () => { const g = game(); atLocation(g, LOCATIONS.length - 1); discovery(g); }],
-  ['Swiftee', () => { const g = game(); atLocation(g, LOCATIONS.length - 1); finale(g); }],
+  ['Finale', () => finish(LEVELS.length - 1)],
 ];
 
 const css = document.createElement('style');

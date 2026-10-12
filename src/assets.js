@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { SHEET_DATA, FISH_ATLAS } = PopoGame;
+const { SHEET_DATA, FISH_ATLAS, SCENE } = PopoGame;
 
 const TITLE = PopoGame.TITLE_DATA || 'assets/backgrounds/title.webp';
 const PLAY = PopoGame.PLAY_DATA || 'assets/sprites/play.webp';
@@ -41,18 +41,22 @@ function preloadBackground(index) {
 }
 
 async function loadCoreAssets() {
-  const [fishing, rowing, fish, bg0, props, mishapPoses, title, play, rowCycle, swiftee] = await Promise.all([
+  const [fishing, rowing, fish, lake, props, mishapPoses, title, play, rowCycle, swiftee, popoPersonality, swifteePersonality] = await Promise.all([
     loadImage('assets/sprites/popo-fishing.webp'),
     loadImage('assets/sprites/popo-rowing.webp'),
     loadImage('assets/sprites/fish.webp'),
-    preloadBackground(0),
+    preloadBackground(SCENE.background),
     loadImage('assets/sprites/popo-props.webp'),
     loadImage('assets/sprites/popo-mishap.png'),
     loadImage(TITLE),
     loadImage(PLAY),
     loadImage('assets/sprites/popo-row-cycle.webp'),
     loadImage('assets/sprites/swiftee.webp'),
+    loadImage('assets/sprites/popo-personality.png'),
+    loadImage('assets/sprites/swiftee-personality.png'),
   ]);
+  assets.popoPersonality = popoPersonality;
+  assets.swifteePersonality = swifteePersonality;
   assets.rowCycle = rowCycle;
   assets.title = title;
   assets.swiftee = swiftee;
@@ -65,8 +69,7 @@ async function loadCoreAssets() {
     rowing: { img: rowing, data: SHEET_DATA.rowing },
   };
   assets.fish = { img: fish, boxes: FISH_ATLAS.boxes, mouths: FISH_ATLAS.mouths, width: FISH_ATLAS.width, height: FISH_ATLAS.height };
-  preloadBackground(1);
-  return bg0;
+  return lake;
 }
 
 Object.assign(PopoGame, { BACKGROUNDS, assets, loadImage, preloadBackground, loadCoreAssets });

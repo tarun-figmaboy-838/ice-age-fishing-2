@@ -1,7 +1,9 @@
-# Popo's Shape Fishing
+# Popo's Trapezium Fishing (part 2)
 
-A small browser game for early shape recognition. Popo the polar bear rows across four icy
-locations and the player taps the fish whose body matches the shape he is asked for.
+The post-learning half of Popo's shape fishing. The learner has just studied trapeziums; now Popo
+fishes at the frozen lake and the learner catches trapezium fish across five levels (16 catches),
+from spotting a trapezium to telling one by its angles. It follows "Trapezium Fishing Game —
+Designer & Developer Handoff" and keeps part 1's look, characters, controls and engine.
 
 ## Run
 
@@ -14,16 +16,16 @@ python3 -m http.server 8000
 ```
 
 The painted water runs through a per-pixel WebGL pass (waves, refraction, seaweed sway, light
-on the sand). The backgrounds are embedded as data URLs in `src/background-data.js` so the
+on the sand). The lake background is embedded as a data URL in `src/background-data.js` so the
 pass also works when the page is opened straight from the file system; without WebGL the
 painting is drawn plainly.
 
 Append `?debug` to the URL to expose `window.popoDebug = { state, game }` for testing.
 
-Append `?dev=1` for a small panel of screen jumps (bottom left): title, intro, each level,
-a right or wrong catch, rowing on, the mystery fish, Swiftee and the summary. Number keys
-1–9 and 0 press the first ten buttons; the backtick key folds the panel away. Dev mode also
-exposes `window.popoDebug`.
+Append `?dev=1` for a small panel of screen jumps (top left): title, intro, each level, the
+angle recall, a right or wrong catch, finishing the current level, the first-time reminder and
+the finale. Number keys 1–9 and 0 press the first ten buttons; the backtick key folds the panel
+away. Dev mode also exposes `window.popoDebug`.
 
 ## Deploy
 
@@ -34,51 +36,130 @@ original artwork and tools out of the deployment.
 ## Layout
 
 - `index.html`, `src/` – the game. The scripts are classic scripts sharing the `PopoGame`
-  namespace, loaded in dependency order from `index.html`. `game.js` orchestrates, `water.js`
-  is the WebGL water pass, `sequences.js` holds the catch,
-  wrong-catch, travel and tutorial flows, `levels.js` holds the shape data and the four
-  locations, `popo.js` renders Popo from the sprite sheets, `fish.js` the swimming fish,
-  `effects.js` the ambient water, `audio.js` the synthesised sound, `ui.js` the HUD/DOM.
-- `asset/` – the untouched source artwork.
+  namespace, loaded in dependency order from `index.html`. `game.js` orchestrates (levels,
+  school of fish, recall card, basket), `sequences.js` holds the timed flows (opening, catch,
+  wrong catch, level change, recall, the look at the angles, celebration), `levels.js` holds the
+  five levels, every fish body and the story lines, `geometry.js` the trapezium maths and where
+  every marking goes, `fish.js` the swimming fish (the art-sheet fish and the vector shape fish),
+  `popo.js` renders Popo from the sprite sheets, `water.js` is the WebGL water pass, `effects.js`
+  the ambient water, `audio.js` the synthesised sound, `ui.js` the HUD/DOM.
+- `asset/` – the untouched source artwork (`asset/trapezium-fish.png` is the fish sheet the
+  shape fish are styled on).
 - `assets/` – the compressed WebP art the game loads, generated from `asset/`.
 - `tools/build-assets.py` – rebuilds `assets/` and `src/sprite-data.js` (needs Pillow).
-- `tools/build-voice.py` – records the voice-overs with Gemini text-to-speech into
-  `src/voice-data.js` (see Voice-overs below).
+- `tools/build-voice.py` – records the voice-overs into `src/voice-data.js` (see Voice-overs).
 - `tools/build-rowing.py` builds the articulated paddling rig (`src/rowing.js`,
   `src/rowing-data.js`, `assets/sprites/paddling/body.png` and `paddle.png`) from
   `asset/popo-paddling-rig-source.png`; `tools/build-rowing-cycle.py` then pre-renders one
   stroke of it into `assets/sprites/popo-row-cycle.webp` (24 frames), which the game crossfades
-  through while Popo rows. The rig's motion maths still times the splashes. Rendering the mesh
-  live cost 20–120 ms a frame; playing the frames costs about 4 ms.
-  `tools/build-popo-layers.py` cuts the raft and rod props used by the wrong-answer fall.
-  It erases the baked fishing line and hook from the fishing sheets so the game can draw a
-  single procedural line, measures each frame's raft anchor and rod tip, and compresses
-  everything to WebP.
+  through while Popo rows in at the start.
 
 ## Flow
 
-Title banner with a floating play button (fish circle it) → Popo's entrance: he zooms in
-rowing flat out (honk honk!) as fish dart out of his way, screeches past his spot, boings back,
-swaps paddle for rod in a poof (ta-da!) and fish leap for joy → the narrator's opening lines →
-four levels, each "catch them all": all the triangle fish in Triangle Bay, all the pentagons in
-Pentagon Cove, all the hexagons in Hexagon Pass, then all the quadrilaterals in Quadrilateral
-Waters (no trapezium) — 13 fish in all, each among other shapes. Fish swim in from the left
-and right at random, cross, swim out of view and come back later; one still to catch is always
-in sight. After each catch the fish goes into the bucket and Popo says "Great catch!"; right
-catches in a row make him bounce higher with a party sound → a trapezium fish Popo has never
-seen leaps out of the water ("Woah! I haven't seen that one before!" "What kind of fish was
-that?") → Swiftee the bird flies in and says "Let's find out!" on the wing → Next, which ends
-the journey back on the title. There is no end screen: Next dispatches a `popo:complete` event
-(and posts `{ type: 'popo:complete' }` to a hosting page) for whatever comes next. Story lines
-live in `STORY` in `src/levels.js`; Swiftee is `src/swiftee.js` (art from `asset/swiftee.png`,
-four wing beats registered on the belly).
+Title → **G0**: Popo rows in to his spot (honk honk, poof, ta-da) and Swiftee flies in from the
+lesson: "Great job!" "You know all about trapeziums!" "Now, let's help Popo catch some fish!" →
+level 1's fish swim in. The first time on a device, Swiftee adds the reminder ("Use the fishing
+rod to aim…" "…and drop the hook on the correct fish.") while a dashed ring circles the hook and
+the hand points at a fish to catch; after the first right catch it never shows again
+(`localStorage` `popo-fishing-learned`) → Swiftee flies off and fishing starts.
 
-`python3 tests/playthrough.py` plays the whole journey in headless Chromium (needs Python
-Playwright); `tests/mishap.py` and `tests/rowing.py` cover the wrong-answer reaction and rowing.
+Tap a fish and Popo casts: the hook flies into its mouth. A right fish is reeled up and flips
+into the bucket and Popo says the level's line; a wrong one pulls Popo in (the wrong-answer
+reaction below), then the instruction shows the level's hint and the narrator reads it. Every
+line is the handoff's wording, voiced, and shown word by word in time with the voice, with a boing
+on the stressed word; longer lines are split into short comic beats (one quick bubble each, with a
+breath between). The bubble grows word by word into its final shape, balanced over its lines. A
+bubble stays up after the voice ends long enough for a young reader (at least 0.9 s, about 130 ms
+a word). Between levels Popo does a happy dance under a "LEVEL 2!" burst before the next fish swim
+in. The tutorial hand taps the middle of the fish, pressing in on each tap with a ripple at the
+fingertip.
+
+| Level | Instruction | Catches | Fish in the school | Markings | Right / hint |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Catch all the trapeziums! | 3 | 4, slow | parallel arrows | "Yes! One pair of parallel sides!" / "Look for parallel sides!" |
+| 2 | Catch the scalene trapeziums! | 3 | 4, slow–moderate | arrows, leg lengths ("5 units") | "The legs have different lengths!" / "Check the leg lengths!" |
+| 3 | Catch the isosceles trapeziums! | 3 | 4, moderate | arrows, matching or different leg ticks | "Both legs are equal!" / "Are the legs equal?" |
+| 4 | Catch the trapeziums with two right angles! | 3 | 5, moderate | arrows, right-angle squares | "Two right angles!" / "Look for two right angles!" |
+| 5 | Catch all the trapeziums! | 4 | 5, moderate | two angle arcs and degrees | "Yes!" "70° + 110° = 180°!" "That means a pair of parallel sides!" / "Add the marked angles!", and Popo: "Not a trapezium." "These angles don't add up to 180°!" "Try again!" |
+
+Each level's school holds a couple of fish to catch among distractors; after a catch another
+fish to catch swims in while the level needs more, and distractors keep it from thinning out
+(`school`, `targets` and `least` in `LEVELS`). Fish swim in briskly from either side, usually
+turn back at the edges, and one still to catch is always in sight. Colour never tells a catch
+from a distractor.
+
+Before level 5 (once): **G5.1** Swiftee: "Remember," "angles on the same leg of a trapezium…"
+"add up to 180°!" A card follows her words: the trapezium on "Remember", the leg lighting up and a
+coloured piece popping into the 70° and the 110° corner on "leg", and on "180°" the two pieces fly
+out and snap together on a straight line before "70° + 110° = 180°" bounces in. **G5.2**
+level 5's fish swim to their places and stop; Swiftee: "Look at the marked angles!"; then
+"Step 1: Observe (2 seconds)" with fishing off, and the fish swim on. A right catch in level 5
+shows its parallel arrows as it is hooked.
+
+**G6** after the sixteenth catch: the last fish swim off, all sixteen leap one after another
+over Popo into his bucket, Popo: "Wow!" "What a catch!", and Swiftee: "You did it!".
+
+Then a cartoon gag, played big: a giant shadow glides under the raft (dun, dun, DUNNN, and the
+edges darken), Popo: "Whoa! A giant fish!" while Swiftee flutters to a perch beside him to
+watch. He casts and hauls ("Come on, big fish!", YANK! HEAVE!, speed lines, the screen shaking),
+and up it bursts in slow motion (SPLOOSH!)... a huge old boot dripping seaweed, with a tin can
+stuck on its toe. Swiftee: "Eek!", Popo: "Huh?!", Swiftee: "Good catch, Popo!" They both crack
+up ("Ha ha ha!" "Hee hee hee!"), Popo lets go, the boot plops back in (SPLASH!) and Swiftee
+flutters back beside him. The end is a Tom and Jerry iris: Swiftee snuggles in beside Popo, the
+iris closes on the two of them and glides to the middle of the screen, sized to frame them whole,
+where they keep laughing in a warm sunburst under "The End", with a **Next** button. Next
+shuts the iris, dispatches a `popo:complete` event (`{ catches: 16, levels: 5 }`, also posted to
+a hosting page) and returns to the title.
+
+## Fish geometry
+
+Every trapezium-level fish is an exact polygon (`FISH` in `src/levels.js`), built in units from a
+few measurements by `src/geometry.js`: bases, height and leg insets or lengths; the two angles at
+the ends of one side; kites and arrowheads. `classify()` measures each body (exclusive
+convention: a trapezium has exactly one pair of parallel sides; no parallelogram, rectangle,
+square or rhombus appears), and `layoutMarks()` places every arrow, tick, square, arc and label
+from the polygon itself, so a label always shows the drawn length or angle. Level 5 uses the
+handoff's fish A–F (70+110, 80+80, 65+115, 95+105 shown as 105+95, 75+105, 80+100).
+
+The fish are drawn as vectors every frame in the style of the uploaded fish sheet: its colours,
+dots, waves, stripes, diamonds and hearts, gloss, outline, rosy cheek, big eye and smile, with a
+swaying tail and fluttering fins. They blink, watch the hook while Popo casts and gasp when
+startled or hooked; nothing ever stretches the body. Markings are printed on the fish in its own
+palette: white arrows, ticks, right-angle corners and arcs edged in the body's dark tone, a
+lighter tint of the body inside each marked angle, and bold white numbers ("5 units", "70°")
+beside the side or inside the angle they measure. They turn and mirror with the body while the
+numbers stay upright; numbers grow on small screens (`LABEL` in `src/fish.js`), where the whole
+fish is also drawn 15% larger, and the face keeps clear of every marking.
+
+## Tests
+
+Python Playwright with its Chromium (`pip install playwright && playwright install chromium`):
+
+- `python3 tests/geometry.py` – every fish's classification, level rule, markings and numbers
+  (also turned, mirrored and resized), and at both label sizes that every label sits inside its
+  body clear of the face, the other labels and every marking.
+- `python3 tests/playthrough.py` – the whole activity through real taps (correct and wrong runs).
+- `python3 tests/mishap.py` – the wrong-answer reaction at five layouts and 15/30/60 FPS, every
+  level's hint, restart, retries and a following right catch.
+- `python3 tests/rowing.py` – the paddling frames and Popo's entrance.
+- `python3 tests/asset_alpha.py` – the mishap art's transparency.
+- `python3 tests/voice.py` – every line the game can say has a recorded clip.
+- `python3 tests/stress.py` – rapid taps, pause/resume, restarts mid-scene, CPU throttling, slow loading.
 
 ## Voice-overs
 
-The narrator, Popo and Swiftee are voiced. The shipped clips were recorded locally with
+All 42 lines part 2 can say (the story, each level's instruction and hint, Popo's right- and
+wrong-catch lines, level 5's sums for each of its trapeziums, and the big-catch gag) are recorded with Kokoro in part 1's
+voices; `LINES` in `tools/build-voice.py` lists them, and symbols are read as words ("70° + 110° =
+180°" as "70 degrees plus 110 degrees equals 180 degrees"). Each word appears as it is spoken and
+the recall card's steps follow the voice. `python3 tests/voice.py` checks that every line the game
+can say has its clip. To re-record after changing a line:
+
+```
+~/.cache/popo-voice311/bin/python tools/build-voice.py --engine kokoro
+```
+
+The narrator, Popo and Swiftee are voiced. Part 1's clips were recorded locally with
 Kokoro-82M (Apache-2.0, no account): its Hindi speakers give the narrator a clear Indian
 English voice, Popo is a lower, bouncier male voice and Swiftee a sped-up bright one:
 
@@ -128,17 +209,18 @@ voice blips. Raw recordings are kept in `asset/voice/`.
   its smile is measured so the hook lands in its mouth.
 - Each background gets a water mask: the surface waves move only open water, so the sky,
   mountains, ice shelves and icebergs stay still. The seaweed sway stops at the plant tips.
-- The title banner (`asset/title-banner.png`) and play button (`asset/play-button.png`) are built
+- The title banner, "Fishing Frenzy" (`asset/title-banner.png`), and play button (`asset/play-button.png`) are built
   into `assets/` and embedded as data URLs so the canvas can use them from the file system.
 - No audio files were supplied; music and effects are synthesised with the Web Audio API.
 
 ## Wrong-answer reaction
 
 The existing cast takes about 0.9 seconds, followed by one 4.8-second game-clock reaction
-(about 5.7 seconds of motion). Popo says “Whoopsie Doopsie!” in his existing speech
-bubble during seated recovery, using the existing synthesized character chatter. Retry waits
-for both motion and dialogue to finish (about 6.37 seconds in the latest real-time check). The wrong
-fish remains available for retry; the correct-catch and progression flows are unchanged.
+(about 5.7 seconds of motion). Popo says “Whoopsie Doopsie!” (in level 5, the handoff's “Not a
+trapezium.” “These angles don't add up to 180°!” “Try again!”) during the seated recovery. Every
+wrong catch gets the full fall. Fishing resumes once the motion and a short line are done, or at
+most 1.2 s after the motion while longer beats are still being said (they carry on over the
+fishing). The wrong fish remains available for retry.
 
 | Reaction time after casting | Beat |
 | --- | --- |
@@ -206,3 +288,40 @@ Existing unrelated working-tree changes were retained; no repository push was ma
 Recovery dialogue checks also passed: exact “Whoopsie Doopsie!” text, locked input while
 visible, restart during its post-motion hold, and recovery with optional audio unavailable.
 The dialogue text is stored in `STORY.wrong` in `src/levels.js`.
+
+## Character personality pack (12 October 2026)
+
+The complete art pack was generated and checked before gameplay integration. Open
+`asset/animation-polish/preview.html` directly to review ten looping clips, with pause,
+speed and background controls. The 52 source poses cover Popo's idle/blink, talking,
+catch celebration, reeling effort, short wobble, finale dance and wet recovery, plus
+Swiftee's expressions, teaching gestures and celebration.
+
+- Original built-in image generation outputs and exact prompts:
+  `asset/animation-polish/{popo-source.png,swiftee-source.png,prompts.txt}`.
+- Runtime transparent atlases: `assets/sprites/popo-personality.png` (36 frames) and
+  `assets/sprites/swiftee-personality.png` (16 frames).
+- Registration metadata: `src/personality-data.js`. Rebuild with
+  `python3 tools/build-personality.py` (Python Playwright and Chromium).
+- Preview timing: `asset/animation-polish/clips.js`; gameplay holds and attachment
+  positions live in `src/popo.js` and `src/swiftee.js`.
+
+Packing removes exterior generation speckles, retains original source files and aligns
+the lower body/feet to a shared anchor at one scale per character. All frames have at
+least 18 pixels of transparent clearance. Animation uses timed key poses; loop endpoints
+repeat their opening pose, without transparent crossfades between different silhouettes.
+
+Popo now blinks and talks, makes a separate catch celebration, visibly strains while
+reeling and dances at completion. The rod rests on the raft during gestures and follows
+his grip when fishing. Character hops move independently of the raft. Swiftee talks,
+blinks and points at the recall diagram. Existing casting, rowing and full splash art
+remain in use. Consecutive mistakes alternate the full splash and a shorter wobble;
+a correct catch or new level resets that variation. Wet recovery can be interrupted by
+the next cast. All acting uses the game clock and pauses with gameplay; reduced motion
+holds quieter reaction poses.
+
+Checks: `python3 tests/personality_assets.py` verifies all sprite bounds, alpha and preview
+loops; `python3 tests/personality.py` covers pause, rod/raft registration, repeated short
+retries, restart cancellation and a subsequent catch on desktop, mobile and reduced-motion
+layouts. Existing `tests/mishap.py`, `tests/rowing.py` and `tests/playthrough.py` exercise
+the established sequences. Preview screenshots are written to `/tmp/popo-animation-review`.

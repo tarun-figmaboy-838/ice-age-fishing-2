@@ -15,19 +15,20 @@ const PHASE = {
   RESURFACING: 'resurfacing',
   RECOVERING: 'recovering',
   LEVEL_TRANSITION: 'levelTransition',
+  RECALL: 'recall',
+  OBSERVE: 'observe',
   COMPLETE: 'complete',
 };
 
 const state = {
   phase: PHASE.INTRO,
   paused: false,
-  locationIndex: 0,
-  challengeIndex: 0,
-  target: null,
+  level: 0,
+  levelCaught: 0, // right catches in the current level
+  used: new Set(), // the current level's fish to catch that have already swum in
   fish: [],
   selectedFish: null,
-  collected: [],
-  discovered: new Set(),
+  collected: [], // every fish caught, in order; they fill the basket at the end
   muted: false,
   token: 0,
   idleTime: 0,
@@ -38,13 +39,12 @@ const state = {
 function resetProgress() {
   state.phase = PHASE.INTRO;
   state.paused = false;
-  state.locationIndex = 0;
-  state.challengeIndex = 0;
-  state.target = null;
+  state.level = 0;
+  state.levelCaught = 0;
+  state.used = new Set();
   state.fish = [];
   state.selectedFish = null;
   state.collected = [];
-  state.discovered = new Set();
   state.idleTime = 0;
   state.hintShown = false;
   state.streak = 0;

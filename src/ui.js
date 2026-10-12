@@ -10,7 +10,7 @@ class UI {
       instruction: $('instruction'), instructionText: $('instruction-text'), next: $('btn-next'),
       sound: $('btn-sound'), pause: $('btn-pause'),
       pauseOverlay: $('overlay-pause'), resume: $('btn-resume'), restart: $('btn-restart'),
-      rotate: $('rotate-hint'), scene: $('scene'), speech: $('speech'), caption: $('caption'),
+      rotate: $('rotate-hint'), scene: $('scene'), speech: $('speech'),
     };
     this.handlers = {};
     this.hitButtons = new Map();
@@ -36,11 +36,12 @@ class UI {
     if (this.handlers[name]) this.handlers[name](...args);
   }
 
-  // A story line: a speech bubble (Popo's or Swiftee's, anchored at a stage point) or the narrator's caption.
-  // Every word is laid out up front (hidden) so the bubble never resizes as words appear.
+  // A story line: Popo's or Swiftee's speech bubble, anchored at a stage point. The whole line is
+  // laid out once, balanced over its lines, and each line break is pinned there; then the bubble
+  // starts small and grows word by word into exactly that shape, with no empty space ahead.
   showLine(who, words) {
     this.hideLines();
-    const el = who === 'narrator' ? this.el.caption : this.el.speech;
+    const el = this.el.speech;
     const line = el.querySelector('.line');
     line.innerHTML = '';
     this.wordEls = words.map((w, i) => {
@@ -52,9 +53,18 @@ class UI {
     });
     el.classList.toggle('swiftee', who === 'swiftee');
     el.hidden = false;
-    if (el === this.el.speech) {
-      this.speechBox = { w: el.offsetWidth, h: el.offsetHeight, em: parseFloat(getComputedStyle(el).fontSize) };
-    }
+    el.classList.add('measuring');
+    // a word's middle, not its top: the bigger stressed words sit higher in the same line
+    const mids = this.wordEls.map((span) => span.offsetTop + span.offsetHeight / 2);
+    const em = parseFloat(getComputedStyle(el).fontSize);
+    this.speechBox = { w: el.offsetWidth, h: el.offsetHeight, em };
+    el.classList.remove('measuring');
+    this.breaks = this.wordEls.map((span, i) => {
+      if (!i || mids[i] - mids[i - 1] < em * 0.6) return null;
+      const br = document.createElement('br');
+      line.insertBefore(br, span);
+      return br;
+    });
     el.classList.remove('pop', 'bump');
     void el.offsetWidth;
     el.classList.add('pop');
@@ -65,7 +75,8 @@ class UI {
   revealWord(i, bump) {
     const span = this.wordEls && this.wordEls[i];
     if (span) span.classList.add('in');
-    if (bump && this.lineEl === this.el.speech) {
+    if (this.breaks && this.breaks[i]) this.breaks[i].classList.add('in');
+    if (bump && this.lineEl) {
       this.el.speech.classList.remove('pop', 'bump');
       void this.el.speech.offsetWidth;
       this.el.speech.classList.add('bump');
@@ -92,10 +103,10 @@ class UI {
 
   hideLines() {
     this.el.speech.hidden = true;
-    this.el.caption.hidden = true;
     this.el.hud.classList.remove('talking');
     this.lineEl = null;
     this.wordEls = null;
+    this.breaks = null;
   }
 
 
@@ -130,7 +141,7 @@ class UI {
   }
 
 
-  // *word* is highlighted (the shape to catch). The panel gives a little boing on every change.
+  // *word* is highlighted (what to look for). The panel gives a little boing on every change.
   setInstruction(text) {
     const el = this.el.instructionText;
     this.el.instruction.classList.toggle('empty', !text);
@@ -188,7 +199,7 @@ class UI {
         btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'fish-hit';
-        btn.setAttribute('aria-label', `${fish.shape.name} fish`);
+        btn.setAttribute('aria-label', fish.label);
         btn.addEventListener('pointerdown', (e) => { e.preventDefault(); this.emit('fishTap', fish, this.toStage(e.clientX, e.clientY)); });
         btn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.emit('fishTap', fish, null); } });
         this.el.hits.appendChild(btn);
@@ -217,7 +228,7 @@ class UI {
     this.el.hand.style.transform = `translate(${(x * this.scale).toFixed(1)}px, ${(y * this.scale).toFixed(1)}px)`;
   }
 
-  // --- Next, at the end of the story ----------------------------------------
+  // --- Next, at the end ------------------------------------------------------
   showNext() {
     this.el.next.hidden = false;
     this.el.next.focus({ preventScroll: true });

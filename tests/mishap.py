@@ -1,4 +1,4 @@
-"""Browser gameplay regression checks. Run: python3 tests/mishap.py.
+"""Wrong-answer reaction regression checks. Run: python3 tests/mishap.py.
 Requires Python Playwright and its Chromium browser; the game has no build step.
 Artifacts are written to /tmp/popo-qa (screenshots + JSON measurements).
 """
@@ -13,7 +13,7 @@ URL = (ROOT / 'index.html').as_uri() + '?debug'
 BOOT = '''async () => {
  const {game:g,state:s}=popoDebug, P=PopoGame;
  g.running=false; g.audio.init(); g.ui.hideStart();g.ui.showHud();
- P.newToken();P.clock.cancelAll();g.endLine();g.applyLocation();g.setupChallenge();
+ P.newToken();P.clock.cancelAll();g.endLine();g.applyScene();g.startLevel(0);g.play();
  P.newToken();P.clock.cancelAll();s.phase=P.PHASE.READY;s.selectedFish=null;
  for(const f of s.fish)f.frozen=false;
  g.titleFade=0;g.tutorialPending=false;g.ui.setHitsEnabled(true);
@@ -23,8 +23,8 @@ BOOT = '''async () => {
  window.step=async(ms,fps=60)=>{for(let n=0;n<ms-0.001;){const d=Math.min(1000/fps,ms-n); if(!s.paused)g.update(d/1000); n+=d;await Promise.resolve();await Promise.resolve();if(qa.phases.at(-1)!==s.phase)qa.phases.push(s.phase);}g.draw();};
  // fish swim in and out of view; the one a test taps is brought into view first
  const inView=f=>{if(f&&f.offstage){f.enter(g.area);f.x=700;}return f;};
- window.wrong=()=>inView(s.fish.find(f=>!f.gone&&!P.matchesTarget(f.key,s.target)));
- window.right=()=>inView(s.fish.find(f=>!f.gone&&P.matchesTarget(f.key,s.target)));
+ window.wrong=()=>inView(s.fish.find(f=>!f.gone&&!f.correct));
+ window.right=()=>inView(s.fish.find(f=>!f.gone&&f.correct));
  g.draw();
 }'''
 
@@ -99,13 +99,18 @@ with sync_playwright() as p:
         assert not errors,errors
         results.append({'viewport':name,'fps':fps,**result,'errors':errors})
         page.close()
-    # Exercise each location's world waterline and optional-audio failure.
+    # Every level's hint after the reaction, and optional-audio failure.
     page=browser.new_page(viewport={'width':1280,'height':720})
     page.goto(URL);page.wait_for_function('window.PopoGame.assets.fish');page.evaluate(BOOT)
-    for location in range(4):
-        page.evaluate('''async i=>{const {game:g,state:s}=popoDebug;await PopoGame.preloadBackground(i);s.locationIndex=i;s.challengeIndex=0;g.applyLocation();g.spawnChallengeFish();s.phase='ready';s.selectedFish=null;g.ui.setHitsEnabled(true);}''',location)
-        page.evaluate('popoDebug.game.onFishTap(wrong())');page.evaluate('step(6600,15)')
-        assert page.evaluate('popoDebug.state.phase==="ready" && !popoDebug.game.popo.mishap')
+    for level in range(5):
+        page.evaluate('''i=>{const {game:g,state:s}=popoDebug;g.startLevel(i);g.play();}''',level)
+        hint=page.evaluate('()=>{const f=wrong();popoDebug.game.onFishTap(f);return popoDebug.game.level().hint.replace(/\\*/g,"");}')
+        page.evaluate('step(%d,15)' % (10500 if level == 4 else 6600))
+        assert page.evaluate('popoDebug.state.phase==="ready" && !popoDebug.game.popo.mishap && popoDebug.state.levelCaught===0')
+        shown=page.locator('#instruction-text').text_content()
+        assert shown==hint,(level,shown,hint)
+        print('level',level+1,'hint:',shown,flush=True)
+    page.evaluate('()=>{const g=popoDebug.game;g.startLevel(0);g.play();}')
     page.evaluate('()=>{popoDebug.game.audio.play=()=>{throw new Error("Optional audio unavailable")};popoDebug.game.audio.duck=()=>{throw new Error("No audio context")};}')
     page.evaluate('popoDebug.game.onFishTap(wrong())');page.evaluate('step(6600)')
     assert page.evaluate('popoDebug.state.phase==="ready" && popoDebug.game.ui.hitsEnabled')
@@ -115,7 +120,8 @@ with sync_playwright() as p:
     page.goto(URL);page.wait_for_function('window.PopoGame.assets.fish');page.evaluate(BOOT)
     page.wait_for_timeout(100)
     page.evaluate('''()=>{const g=popoDebug.game;qa.wallStart=performance.now();qa.frames=[];qa.audio=[];const update=g.update.bind(g);g.update=dt=>{qa.frames.push(dt);update(dt);};const play=g.audio.play.bind(g.audio);g.audio.play=n=>{qa.audio.push({name:n,wall:performance.now(),audio:g.audio.ctx.currentTime});play(n);};g.running=true;g.lastFrame=performance.now();requestAnimationFrame(t=>g.loop(t));}''')
-    page.get_by_role('button',name='Circle fish',exact=True).press('Enter')
+    page.evaluate('()=>{wrong();popoDebug.game.draw();}')
+    page.locator('.fish-hit[aria-label="Fish"]').first.press('Enter')
     page.evaluate('popoDebug.game.audio.resume()')
     page.wait_for_function('popoDebug.state.phase==="ready"',timeout=10000)
     realtime=page.evaluate('''()=>({elapsed:(performance.now()-qa.wallStart)/1000,frames:qa.frames.length,maxFrame:Math.max(...qa.frames),audio:qa.audio,audioState:popoDebug.game.audio.ctx.state})''')

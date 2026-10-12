@@ -18,7 +18,7 @@ const SHEETS = {
 // The raft prop (cell 0 of popo-props) is registered like the idle frame it was cut from:
 // cell point (186, 383) sits on the anchor at scale 0.93. Frames register their own raft's
 // bottom-right corner onto the prop's, which is the steadiest reference in the artwork.
-const PROP = { scale: 0.93, mid: 186, bottom: 383, left: 5, right: 367, bucket: { x: 78, y: 290 } };
+const PROP = { scale: 0.93, mid: 186, bottom: 383, left: 5, right: 367, bucket: { x: 78, y: 290 }, rim: { x: 76, y: 284 } };
 const PROP_RIGHT_DX = (PROP.right - PROP.mid) * PROP.scale;
 // Where Popo sits: the back of the raft's deck, clear of the bucket, so he sits on the boat
 // rather than at the water's edge.
@@ -29,7 +29,21 @@ const SEAT_SHIFT = { x: 196 - 178, y: 338 - 373 };
 // Manually inspected pose extents, torso registrations and attachment landmarks.
 // One atlas-wide scale preserves the generated character's proportions in every pose.
 const MISHAP_SCALE = 0.49;
+const LINE_LENGTH = 150; // how far the hook hangs below the rod tip
 const { MISHAP_POSES } = PopoGame;
+
+// Held drawings plus continuous body motion give crisp acting without double-image fades.
+// Every clip starts and ends on its registered neutral pose.
+const ACTING = {
+  catch: { frames: [0, 7, 8, 9, 10, 0], holds: [100, 100, 130, 230, 180, 130] },
+  wobble: { frames: [0, 19, 20, 21, 22, 23, 0], holds: [90, 100, 120, 150, 130, 230, 120] },
+  dance: { frames: [0, 25, 26, 27, 28, 27, 26, 29, 0], holds: [120, 120, 180, 170, 170, 170, 180, 120, 140] },
+  wet: { frames: [0, 30, 31, 32, 31, 32, 33, 34, 0], holds: [60, 100, 90, 90, 90, 90, 200, 220, 120] },
+  // a belly laugh: arms up, eyes squeezed shut, rocking back and forth
+  laugh: { frames: [0, 26, 27, 28, 27, 28, 27, 28, 27, 26, 0], holds: [80, 120, 130, 130, 130, 130, 130, 130, 130, 160, 120] },
+  // the same laugh going on and on (looped at the end)
+  giggle: { frames: [26, 27, 28, 27, 28], holds: [150, 130, 130, 130, 130] },
+};
 
 
 function frameData(sheet, name) {
@@ -52,13 +66,16 @@ class Popo {
     this.dip = 0;
     this.lean = 0;
     this.travelShift = 0;
-    this.line = { visible: true, mode: 'dangle', hook: { x: 0, y: 0 }, arc: 0, tension: 0, length: 150 };
+    this.line = { visible: true, mode: 'dangle', hook: { x: 0, y: 0 }, arc: 0, tension: 0, length: LINE_LENGTH };
     this.swayT = 0;
     this.mishap = null;
     this.rowing = null;
     this.waterResponse = 0;
     this.waveY = 0;
     this.waveAngle = 0;
+    this.acting = null;
+    this.actorTime = 0;
+    this.actorLift = 0;
     this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
@@ -69,7 +86,11 @@ class Popo {
 
   // fadeMs 0 is a hard cut, used inside an animation so frames never double-expose.
   setPose(sheet, frame, fadeMs = 120) {
+    if (sheet !== 'fishing') this.acting = null;
     if (this.pose.sheet === sheet && this.pose.frame === frame) return;
+    // The personality drawings and the sheet frames are different art: blending from one to the
+    // other would flash a second, differently drawn Popo (and a second rod), so cut instead.
+    if (this.actorFrame() !== null) fadeMs = 0;
     this.prevPose = fadeMs > 0 ? this.pose : null;
     this.pose = { sheet, frame };
     this.fade = fadeMs > 0 ? 0 : 1;
@@ -92,7 +113,80 @@ class Popo {
     this.setPose('fishing', 'idle', 140);
   }
 
+  // A looped clip keeps playing (rod down) until another clip or the idle pose replaces it.
+  act(name, loop = false) {
+    const clip = ACTING[name];
+    if (!clip || this.mishap || this.rowing) return;
+    this.acting = { name, t: 0, loop, duration: clip.holds.reduce((a, b) => a + b, 0) / 1000 };
+  }
+
+  // The personality drawing for this moment, or null. They only act (with the rod set down on the
+  // deck): while he holds the rod he is the original fishing drawing, whose paws grip it.
+  actorFrame() {
+    if (!assets.popoPersonality || this.mishap || this.rowing || !this.acting || this.pose.sheet !== 'fishing') return null;
+    const clip = ACTING[this.acting.name];
+    if (this.reduced) return { catch: 10, wobble: 23, dance: 26, wet: 34, laugh: 28, giggle: 28 }[this.acting.name];
+    let at = this.acting.t * 1000;
+    for (let i = 0; i < clip.frames.length; i++) {
+      if (at < clip.holds[i]) return clip.frames[i];
+      at -= clip.holds[i];
+    }
+    return 0;
+  }
+
+  actorOrigin() {
+    return { x: this.anchor.x + SEAT.dx + 12,
+      y: this.anchor.y + SEAT.dy + 14 + this.actorLift };
+  }
+
+  // How far the rod is set down on the deck during an acting clip (0 held, 1 resting).
+  rodParked() {
+    if (!this.acting || this.actorFrame() === null) return 0;
+    const a = this.acting;
+    if (a.loop) return a.looped ? 1 : Math.min(1, a.t / .14);
+    return Math.max(0, Math.min(1, a.t / .14, (a.duration - a.t) / .14));
+  }
+
+  // Where the rod lies while he acts: lifted from his grip and set down on the deck (rodParked).
+  actorRod() {
+    const o = this.actorOrigin();
+    const k = this.rodParked();
+    return { x: o.x + 24 + (-36 - 24) * k, y: o.y - 73 + (73 - 22 - this.actorLift) * k, angle: .3 + (1 - .3) * k };
+  }
+
+  drawActor(ctx, frame) {
+    this.prepareMishapArt();
+    const o = this.actorOrigin(), r = this.actorRod();
+    // the rod lies on the deck behind him
+    ctx.save();ctx.translate(r.x, r.y);ctx.rotate(r.angle);
+    ctx.drawImage(this.mishapArt.rod, -320*.63, -276*.63, 620*.63, 435*.63);
+    ctx.restore();
+    const data = PopoGame.PERSONALITY_DATA.popo;
+    const k = 196.5 / data.frames[0].height;
+    const breath = this.reduced ? 0 : Math.sin(this.actorTime * 2.2) * .005;
+    const [sx, sy, sw, sh] = data.frames[frame].box;
+    ctx.save();ctx.translate(o.x, o.y);ctx.scale(1 - breath * .35, 1 + breath);
+    ctx.drawImage(assets.popoPersonality, sx, sy, sw, sh, -128*k, -236*k, 256*k, 256*k);
+    ctx.restore();
+  }
+
+
+
   update(dt) {
+    this.actorTime += dt;
+    if (this.acting) {
+      this.acting.t += dt;
+      if (this.acting.t >= this.acting.duration) {
+        if (this.acting.loop) {
+          this.acting.t -= this.acting.duration;
+          this.acting.looped = true;
+        } else {
+          this.acting = null;
+        }
+      }
+    }
+    // a line left short (after the fall) lowers smoothly back to its fishing length
+    if (this.line.length < LINE_LENGTH) this.line.length = Math.min(LINE_LENGTH, this.line.length + dt * 220);
     if (this.mishap) {
       this.bobT += dt * 1.1;
       this.swayT += dt * 1.6;
@@ -189,6 +283,11 @@ class Popo {
   rodTip() {
     if (this.rowing) return null;
     if (this.mishap) return this.mishapRodPoint(1139, 70);
+    if (this.actorFrame() !== null) {
+      const r = this.actorRod(), dx = (1139-940)*.63, dy = (70-276)*.63;
+      return this.transformPoint(r.x+dx*Math.cos(r.angle)-dy*Math.sin(r.angle),
+        r.y+dx*Math.sin(r.angle)+dy*Math.cos(r.angle));
+    }
     const cur = this.placement(this.pose.sheet, this.pose.frame).tip;
     let tip = cur;
     if (this.fade < 1 && this.prevPose) {
@@ -204,6 +303,11 @@ class Popo {
     return this.transformPoint(this.anchor.x + (PROP.bucket.x - PROP.mid) * PROP.scale, this.anchor.y + (PROP.bucket.y - PROP.bottom) * PROP.scale);
   }
 
+  // The middle of the bucket's rim, riding the waves with the raft.
+  bucketRim() {
+    return this.transformPoint(this.anchor.x + (PROP.rim.x - PROP.mid) * PROP.scale, this.anchor.y + (PROP.rim.y - PROP.bottom) * PROP.scale);
+  }
+
   raftRight() {
     return this.transformPoint(this.placement(this.pose.sheet, this.pose.frame).raftRightX, this.anchor.y);
   }
@@ -214,7 +318,10 @@ class Popo {
     ctx.save();
     this.applyTransform(ctx);
     this.drawRaftProp(ctx);
-    if (this.fade < 1 && this.prevPose) {
+    const actorFrame = this.actorFrame();
+    if (actorFrame !== null) {
+      this.drawActor(ctx, actorFrame);
+    } else if (this.fade < 1 && this.prevPose) {
       this.drawPose(ctx, this.prevPose, 1 - this.fade);
       this.drawPose(ctx, this.pose, this.fade);
     } else {
@@ -325,6 +432,8 @@ class Popo {
   }
 
   beginMishap(waterline) {
+    this.acting = null;
+    this.actorLift = 0;
     this.prepareMishapArt();
     this.stopFrames();
     this.pose = { sheet: 'fishing', frame: 'idle' };
@@ -499,8 +608,11 @@ class Popo {
     const tip = this.rodTip();
     if (!tip) return null;
     if (this.line.mode === 'dangle') {
-      const sway = Math.sin(this.swayT) * 7;
-      return { x: tip.x + sway, y: tip.y + this.line.length + Math.cos(this.swayT) * 1.5 };
+      // with the rod set down on the deck, the hook rests beside its tip instead of hanging
+      // through the raft into the water
+      const k = this.rodParked();
+      const sway = Math.sin(this.swayT) * 7 * (1 - k);
+      return { x: tip.x + sway + 12 * k, y: tip.y + (this.line.length + Math.cos(this.swayT) * 1.5) * (1 - k) + 6 * k };
     }
     return this.line.hook;
   }

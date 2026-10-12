@@ -300,7 +300,6 @@ class AudioEngine {
       case 'complete': [392.0, 523.25, 659.25, 783.99].forEach((n, i) => { this.tone({ freq: n, t: now + i * 0.15, type: 'triangle', dur: 0.5, gain: 0.12 }); this.bell(n * 2, now + i * 0.15, 0.06); }); break;
       case 'hint': this.tone({ freq: 880, dur: 0.18, gain: 0.07 }); break;
       case 'talk': { const f = 250 + Math.random() * 130; this.tone({ freq: f, to: f * (1.1 + Math.random() * 0.25), type: 'triangle', dur: 0.07, gain: 0.08 }); break; }
-      case 'narrate': this.bell(523.25, now, 0.07); this.bell(783.99, now + 0.12, 0.05); break;
       case 'woah': this.tone({ freq: 380, to: 1150, type: 'sine', dur: 0.34, gain: 0.11 }); this.tone({ freq: 1150, to: 720, t: now + 0.32, type: 'sine', dur: 0.3, gain: 0.08 }); break;
       case 'leap': this.noise({ dur: 0.5, type: 'bandpass', freq: 400, to: 2600, q: 1.1, gain: 0.22 }); this.tone({ freq: 300, to: 760, dur: 0.4, gain: 0.08, type: 'triangle' }); break;
       case 'boing': this.tone({ freq: 170, to: 560, type: 'sine', dur: 0.22, gain: 0.12 }); this.tone({ freq: 560, to: 420, t: now + 0.2, type: 'sine', dur: 0.16, gain: 0.07 }); break;
@@ -319,6 +318,16 @@ class AudioEngine {
       case 'word': { const f = 700 + Math.random() * 260; this.tone({ freq: f, to: f * 1.15, type: 'sine', dur: 0.05, gain: 0.04 }); break; }
       case 'cheer': [523.25, 659.25, 783.99].forEach((n, i) => this.tone({ freq: n, t: now + i * 0.07, type: 'triangle', dur: 0.16, gain: 0.08 })); break;
       case 'bloop': this.tone({ freq: 420, to: 980, dur: 0.12, gain: 0.09 }); this.tone({ freq: 620, to: 1300, t: now + 0.08, dur: 0.09, gain: 0.05 }); break;
+      // a big belly laugh, each "ha" a little lower than the last
+      case 'laugh': [0, 0.17, 0.34, 0.51, 0.7].forEach((d, i) => { const f = 300 - i * 22; this.tone({ freq: f, to: f * 0.8, type: 'triangle', t: now + d, dur: 0.13, gain: 0.1 }); this.tone({ freq: f * 2, to: f * 1.6, type: 'sine', t: now + d, dur: 0.1, gain: 0.03 }); }); break;
+      // dun, dun, DUNNN: something big is coming
+      case 'drama': [[196, 0, 0.28], [185, 0.32, 0.28], [147, 0.66, 1.1]].forEach(([f, d, dur]) => { this.tone({ freq: f, type: 'sawtooth', t: now + d, dur, gain: 0.07 }); this.tone({ freq: f / 2, type: 'triangle', t: now + d, dur, gain: 0.1 }); }); break;
+      // a comic thump for each YANK! and HEAVE!
+      case 'thump': this.tone({ freq: 140, to: 60, type: 'sine', dur: 0.22, gain: 0.22 }); this.noise({ dur: 0.12, type: 'lowpass', freq: 900, to: 200, gain: 0.25 }); break;
+      // the line straining: a wobbling creak
+      case 'creak': this.tone({ freq: 520, to: 380, type: 'sawtooth', dur: 0.32, gain: 0.025 }); this.tone({ freq: 545, to: 395, type: 'sawtooth', dur: 0.32, gain: 0.02 }); break;
+      // the cartoon iris closing: a slide whistle down
+      case 'iris': this.tone({ freq: 1400, to: 260, type: 'sine', dur: 0.75, gain: 0.08 }); break;
       default: break;
     }
   }

@@ -19,6 +19,12 @@ class Swiftee {
     this.flapRate = 16;
     this.lastBeat = -1;
     this.onDownstroke = null;
+    this.speaking = false;
+    this.teaching = false;
+    this.celebrating = false;
+    this.blinkIn = 2.1;
+    this.blink = 0;
+    this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
   // a quick loop-de-loop on the stressed word
@@ -33,6 +39,9 @@ class Swiftee {
 
   update(dt) {
     this.time += dt;
+    this.blinkIn -= dt;
+    this.blink = Math.max(0, this.blink - dt);
+    if (this.blinkIn <= 0) { this.blink = .18; this.blinkIn = 2.8 + Math.random() * 2; }
     this.beat += dt * this.flapRate;
     const beat = Math.floor(this.beat);
     if (beat !== this.lastBeat) {
@@ -56,14 +65,37 @@ class Swiftee {
   }
 
   bobY() {
-    const hop = this.bounce ? Math.sin(this.bounce.t * Math.PI) * 26 : 0;
-    return this.y + Math.sin(this.time * 7) * 6 - hop;
+    const hop = this.bounce && !this.reduced ? Math.sin(this.bounce.t * Math.PI) * 26 : 0;
+    return this.y + Math.sin(this.time * 7) * (this.reduced ? 1 : 6) - hop;
+  }
+
+  personalityFrame() {
+    // Retain the established flight cycle during swoops and loop-de-loops.
+    if (!assets.swifteePersonality || Math.abs(this.lean) > .025 || this.spin) return null;
+    if (this.teaching) return this.reduced ? 10 : [9, 10, 11, 10][Math.floor(this.time * 2) % 4];
+    if (this.laughing) return this.reduced ? 7 : [7, 3, 7, 2][Math.floor(this.time * 8) % 4];
+    if (this.blink > 0) return this.blink > .13 || this.blink < .04 ? 1 : 2;
+    if (this.speaking) return [3, 0, 4, 3, 5, 0][Math.floor(this.time * 10) % 6];
+    if (this.celebrating && Math.sin(this.time * 1.8) > .6) return 7;
+    return this.reduced ? 0 : [12, 0, 14, 0][Math.floor(this.beat / 2) % 4];
   }
 
   draw(ctx) {
     const d = PopoGame.SWIFTEE_DATA;
     const img = assets.swiftee;
     if (!img || !d) return;
+    const personality = this.personalityFrame();
+    if (personality !== null) {
+      const data = PopoGame.PERSONALITY_DATA.swiftee;
+      const k = 178 / data.frames[0].height;
+      const [sx, sy, sw, sh] = data.frames[personality].box;
+      ctx.save();ctx.translate(this.x, this.bobY() + 45);
+      // Point into the lesson card (screen right), then face Popo again when done.
+      ctx.scale((this.teaching ? 1 : this.dir) * k, k);
+      ctx.drawImage(assets.swifteePersonality, sx, sy, sw, sh, -128, -236, 256, 256);
+      ctx.restore();
+      return;
+    }
     const frame = BEAT[Math.floor(this.beat) % BEAT.length];
     const spin = this.spin ? Math.sin(this.spin.t * Math.PI / 2) ** 2 * Math.PI * 2 : 0;
     ctx.save();

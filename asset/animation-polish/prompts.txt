@@ -1,0 +1,23 @@
+Generated using the built-in image_gen tool, with transparent_background=true.
+Source images are preserved unmodified. tools/build-personality.py packs runtime atlases.
+
+POPO
+Use case: stylized-concept. Create a production transparent PNG sprite atlas for this exact polar bear Popo using image 1 (fishing) and image 2 (mishap) as character identity references, not edit targets. Match his cream fluffy fur, blue eyes, dark brows, black nose and paw pads, rounded baby bear proportions, soft 3D lighting, right-facing three-quarter view. ALL frames must use the SAME camera, character scale, seated foot baseline and pelvis anchor. No perspective changes. No text, labels, grid lines, backgrounds, raft, rod, bucket, shadows on ground or other objects.
+Layout EXACTLY 6 columns x 6 rows evenly spaced square cells, 3072x3072 if possible; one COMPLETE isolated bear in every cell, ample transparent safety margins. Seated poses only. Character centered consistently, feet at 85 percent cell height. Keep head size identical throughout.
+Each row is a coherent animation with six sequential keyframes left to right, small controlled differences so it can play smoothly:
+ROW 1 idle and speech: neutral closed smile / half blink / full blink / small talking mouth / wide happy talking mouth / round O talking mouth. Hands gently together by belly.
+ROW 2 catch celebration: neutral seated anticipation / crouch with excited face / lift right fist / triumphant fist pump with huge smile / relaxed proud grin / return to neutral seated pose.
+ROW 3 reeling effort WITHOUT rod, paws gripping an invisible handle in front at consistent point: ready / lean backward slightly / puff cheeks and pull / maximum determined effort / release effort / ready again.
+ROW 4 short wobble: neutral seated / surprised lean left / wide eyed arms spread / lean right feet up slightly / regain balance / sheepish relieved grin.
+ROW 5 finale happy seated dance: neutral / both paws rise / both paws high delighted / sway left paws high / sway right paws high / settle neutral.
+ROW 6 wet recovery: wet seated bear / head turned slightly left eyes shut / head turned slightly right eyes shut / paw wipes brow / relieved smile / normal neutral seated bear. Keep water droplets separate from body if any and tiny.
+This is an animation asset, not a character exploration sheet. Preserve model identity and registration rigorously. Real alpha transparency. All 36 frames completely within their own cells.
+
+SWIFTEE
+Use case: stylized-concept. Production game animation sprite atlas on REAL TRANSPARENT background. Reference image 1 is identity/style reference for Swiftee: EXACT same small teal cartoon bird, pale mint face, huge dark eyes, orange beak and feet, golden belly, flat polished illustration with soft shading and dark teal outlines. Do not change art style to 3D. Same body proportions, right-facing three-quarter camera, scale, belly anchor and baseline in ALL cells.
+Create EXACT 4 columns by 4 rows, sixteen complete isolated bird sprites equally spaced in square cells, generous transparent gutters, no cell borders or text. Every bird fits completely, wing tips never touch adjacent cells.
+Row 1 expression variations on identical hovering body with wings extended halfway: neutral closed beak / half blink / full blink / cheerful small open talking beak.
+Row 2 expression variations on identical hovering body with wings halfway: wide happy talking beak / round surprised beak with wide eyes / thoughtful tilted brow / delighted eyes closed laughing.
+Row 3 teaching gesture coherent sequence: hover neutral / glance downward right / extend right wing to point downward right at diagram / nod while pointing. Keep other wing lifted for hover.
+Row 4 celebration coherent sequence: anticipation wings low / wings halfway up cheerful / wings raised high joyful / settle wings halfway. No sparkle particles baked in.
+Faithfully preserve face placement, head/body size, light direction, palette and right-facing orientation throughout. No lettering, labels, ground, shadows, scenery, props, extra characters. Smooth coherent animation key poses, not separate designs.

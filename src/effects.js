@@ -75,28 +75,6 @@ class Effects {
 
   plantsFor(index) { return PLANTS[index] || PLANTS[0]; }
 
-  plantDisplacement(x, y, plants) {
-    if (this.reduced) return 0;
-    let bend = 0;
-    for (const p of plants) {
-      if (x <= p.left || x >= p.right || y <= p.top || y >= p.root) continue;
-      const height = p.root - p.top;
-      const rootWeight = (p.root - y) / height;
-      const topFade = Math.min(1, (y - p.top) / 18);
-      const across = Math.sin((x - p.left) / (p.right - p.left) * Math.PI);
-      const rhythm = Math.sin(this.t * p.speed + p.phase) + 0.32 * Math.sin(this.t * p.speed * 0.61 + p.phase * 2);
-      bend += rhythm * p.amp * rootWeight * rootWeight * topFade * across;
-    }
-    return bend;
-  }
-
-  surfaceDisplacement(y) {
-    if (this.reduced || y <= 300 || y >= 420) return 0;
-    const envelope = Math.sin((y - 300) / 120 * Math.PI) ** 2;
-    return envelope * (Math.sin(this.t * 0.43 + y * 0.035) * 1.4
-      + Math.sin(this.t * 0.27 - y * 0.022) * 0.6);
-  }
-
   resetBubble(b, source = null) {
     const spot = source || this.sources[Math.floor(Math.random() * this.sources.length)];
     const r = rand(1.5, 3.8);

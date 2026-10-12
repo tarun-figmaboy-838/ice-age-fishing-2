@@ -89,9 +89,11 @@ html, body {
 .hand[hidden] { display: none; }
 /* the fingertip is the image's top-left corner, so tapping moves along the finger */
 @keyframes hand-tap {
-  0%, 100% { margin: 0; }
-  50% { margin: 1.1em 0 0 1.1em; }
+  0%, 100% { margin: 0; scale: 1; }
+  45% { margin: 1.1em 0 0 1.1em; scale: 0.9; }
+  60% { margin: 0.9em 0 0 0.9em; scale: 0.94; }
 }
+.hand { transform-origin: 0 0; }
 
 /* ---------- HUD ---------- */
 .hud { position: absolute; inset: 0; pointer-events: none; }
@@ -157,14 +159,20 @@ html, body {
 .icon-btn.muted .wave { display: none; }
 .icon-btn.muted .mute { display: block; }
 
-/* ---------- story: Popo's speech bubble and the narrator's caption ---------- */
-.speech, .caption { position: absolute; pointer-events: none; z-index: 3; }
+/* ---------- story: Popo's and Swiftee's speech bubble ---------- */
+.speech { position: absolute; pointer-events: none; z-index: 3; }
 .hud { z-index: 5; }
 .overlay.pause { z-index: 6; }
-.speech[hidden], .caption[hidden] { display: none; }
-.line .w { display: inline-block; visibility: hidden; white-space: pre; }
-.line .w.in { visibility: visible; animation: word-in 0.32s cubic-bezier(0.2, 1.8, 0.4, 1); }
-.line .w.em { color: var(--accent); font-weight: 700; font-size: 1.15em; }
+.speech[hidden] { display: none; }
+/* words take no room until they're said, so the bubble grows with them; the breaks are pinned
+   where the whole line wraps (balanced), so words never jump between lines as it grows */
+.line { white-space: nowrap; }
+.line .w { display: none; white-space: pre; }
+.line br:not(.in) { display: none; }
+.line .w.in { display: inline-block; animation: word-in 0.32s cubic-bezier(0.2, 1.8, 0.4, 1); }
+.speech.measuring .line { white-space: normal; text-wrap: balance; }
+.speech.measuring .line .w { display: inline-block; animation: none; }
+.line .w.em { color: var(--accent); font-weight: 700; font-size: 1.15em; transform-origin: 0 75%; }
 .line .w.em.in { animation: word-boing 0.55s cubic-bezier(0.2, 1.8, 0.4, 1); }
 @keyframes word-in { from { transform: translateY(0.35em) scale(0.4); opacity: 0; } }
 @keyframes word-boing {
@@ -209,34 +217,13 @@ html, body {
   0%, 100% { transform: translate(-0.6em, -100%) scale(1); }
   45% { transform: translate(-0.6em, -100%) scale(1.08, 0.94); }
 }
-.caption {
-  left: 50%;
-  top: 2.2%;
-  width: max-content;
-  max-width: 32em;
-  padding: 0.55em 1.3em 0.6em;
-  font-size: 3.4em;
-  font-weight: 600;
-  line-height: 1.25;
-  text-align: center;
-  color: var(--ink);
-  background: var(--paper);
-  border: 0.13em solid var(--ink);
-  border-radius: 1em;
-  box-shadow: 0 0.16em 0 var(--ink), 0 0.5em 1.3em rgba(0, 20, 60, 0.25);
-  transform: translateX(-50%);
-}
-.caption.pop { animation: caption-in 0.55s cubic-bezier(0.2, 1.5, 0.4, 1); }
-@keyframes caption-in {
-  from { transform: translateX(-50%) translateY(-0.8em) scale(0.9); opacity: 0; }
-}
 .hud.talking .instruction, .instruction.empty { opacity: 0; }
 
 /* Swiftee's bubble: the same panel with a teal outline */
 .speech.swiftee { border-color: #0f6e6a; box-shadow: 0 0.16em 0 #0f6e6a, 0 0.5em 1.2em rgba(0, 20, 60, 0.25); }
 .speech.swiftee::before { border-top-color: #0f6e6a; }
 
-/* Next, once Swiftee has spoken */
+/* Next, at the end */
 .next-btn {
   position: absolute;
   right: 3.2%;
@@ -371,6 +358,6 @@ html, body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hand, .speech.pop, .caption.pop, .next-btn { animation: none; }
+  .hand, .speech.pop, .next-btn { animation: none; }
   .scene { transition: none; }
 }

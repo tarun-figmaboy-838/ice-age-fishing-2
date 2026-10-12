@@ -94,21 +94,51 @@ AUDITION_LINE = {'narrator': 'Popo *loves* fishing.', 'popo': 'Whoopsie Doopsie!
 
 INSTRUCTION = 'Clear and encouraging, a little slower so a young child can follow.'
 
-# (speaker, text exactly as shown in the game with *stressed* words, extra delivery note)
+# (speaker, text exactly as shown in the game with *stressed* words, extra delivery note).
+# The game's lines live in STORY and LEVELS in src/levels.js; keep this list in step with them.
 LINES = [
-    ('narrator', 'Popo *loves* fishing.', ''),
-    ('narrator', 'And today…', 'Teasing, building suspense.'),
-    ('narrator', 'he wants to catch *all* kinds of fish!', 'Big and excited.'),
-    ('narrator', 'Catch all the *triangle* fish!', INSTRUCTION),
-    ('narrator', 'Catch all the *pentagon* fish!', INSTRUCTION),
-    ('narrator', 'Catch all the *hexagon* fish!', INSTRUCTION),
-    ('narrator', 'Catch all the *quadrilateral* fish!', INSTRUCTION),
+    ('narrator', 'Catch all the *trapeziums*!', INSTRUCTION),
+    ('narrator', 'Catch the *scalene* trapeziums!', INSTRUCTION),
+    ('narrator', 'Catch the *isosceles* trapeziums!', INSTRUCTION),
+    ('narrator', 'Catch the trapeziums with *two right angles*!', INSTRUCTION),
+    ('narrator', 'Look for *parallel* sides!', 'A gentle, helpful hint.'),
+    ('narrator', 'Check the *leg* lengths!', 'A gentle, helpful hint.'),
+    ('narrator', 'Are the legs *equal?*', 'A gentle, curious hint.'),
+    ('narrator', 'Look for two *right* angles!', 'A gentle, helpful hint.'),
+    ('narrator', 'Add the marked *angles!*', 'A gentle, helpful hint.'),
+    ('swiftee', '*Great* job!', 'Bursting with pride.'),
+    ('swiftee', 'You know all about *trapeziums!*', 'Cheering.'),
+    ('swiftee', "Now, let's help Popo catch some *fish!*", 'Eager, rallying.'),
+    ('swiftee', 'Use the fishing rod to *aim*…', 'Helpful, leaving a beat.'),
+    ('swiftee', '…and drop the hook on the *correct* fish.', 'Finishing the thought, bright.'),
+    ('swiftee', '*Remember,*', 'A playful, secret-sharing hush.'),
+    ('swiftee', 'angles on the same *leg* of a trapezium…', 'Building up, slowly.'),
+    ('swiftee', 'add up to *180°!*', 'The big reveal, delighted.'),
+    ('swiftee', 'Look at the marked *angles!*', 'Curious, pointing.'),
+    ('swiftee', 'You *did* it!', 'Overjoyed.'),
     ('popo', 'Whoopsie Doopsie!', 'Wobbly and embarrassed, then a giggle.'),
-    ('popo', '*Great* catch!', 'Delighted and proud.'),
-    ('popo', '*Woah!*', 'An amazed gasp.'),
-    ('popo', "I haven't seen *that* one before!", 'Astonished.'),
-    ('popo', 'What *kind* of fish was that?', 'Puzzled and curious.'),
-    ('swiftee', "Let's find *out!*", 'Eager, swooping in.'),
+    ('popo', '*Yes!*', 'A delighted whoop.'),
+    ('popo', 'One pair of *parallel* sides!', 'Delighted and proud.'),
+    ('popo', 'The legs have *different* lengths!', 'Delighted, as if spotting a secret.'),
+    ('popo', 'Both legs are *equal!*', 'Delighted.'),
+    ('popo', 'Two *right* angles!', 'Delighted.'),
+    ('popo', '70° + 110° = *180°!*', 'Adding it up proudly.'),
+    ('popo', '65° + 115° = *180°!*', 'Adding it up proudly.'),
+    ('popo', '75° + 105° = *180°!*', 'Adding it up proudly.'),
+    ('popo', '80° + 100° = *180°!*', 'Adding it up proudly.'),
+    ('popo', 'That means a pair of *parallel* sides!', 'Like a detective solving the case.'),
+    ('popo', 'Not a *trapezium.*', 'Dripping wet, a little sheepish.'),
+    ('popo', "These angles don't add up to *180°!*", 'Working it out.'),
+    ('popo', 'Try *again!*', 'Cheerful, bouncing back.'),
+    ('popo', '*Wow!*', 'An amazed gasp.'),
+    ('popo', 'What a *catch!*', 'Bursting with joy.'),
+    ('popo', 'Whoa! A *giant* fish!', 'Wide-eyed and thrilled.'),
+    ('popo', 'Come *on*, big fish!', 'Straining with all his might, through gritted teeth.'),
+    ('swiftee', '*Eek!*', 'A startled squeak.'),
+    ('popo', 'Huh?!', 'Baffled, staring at an old boot.'),
+    ('swiftee', 'Good catch, *Popo!*', 'Teasing, trying not to laugh.'),
+    ('popo', 'Ha ha *ha!*', 'A big, rolling belly laugh.'),
+    ('swiftee', 'Hee hee *hee!*', 'A squeaky giggle.'),
 ]
 
 
@@ -122,9 +152,15 @@ def slug(who, text):
     return f"{who}-{re.sub(r'[^a-z0-9]+', '-', voice_key(who, text).split(':', 1)[1]).strip('-')}"[:60]
 
 
+def aloud(text):
+    """Symbols read as words: "70° + 110° = 180°" is "70 degrees plus 110 degrees equals 180 degrees"."""
+    text = re.sub(r'(\d+)°', r'\1 degrees', text)
+    return text.replace(' + ', ' plus ').replace(' = ', ' equals ')
+
+
 def spoken(text):
     # Gemini stresses capitalised words; the stars are only for the on-screen highlight
-    return re.sub(r'\*([^*]+)\*', lambda m: m.group(1).upper(), text)
+    return re.sub(r'\*([^*]+)\*', lambda m: m.group(1).upper(), aloud(text))
 
 
 def api_key():
@@ -339,7 +375,7 @@ def record_kokoro(who, text, ref):
     if lang not in PIPELINES:
         PIPELINES[lang] = KPipeline(lang_code=lang, repo_id='hexgrad/Kokoro-82M')
     # Kokoro reads capitals as letters, so the stressed words go in as plain text
-    plain = text.replace('*', '')
+    plain = aloud(text.replace('*', ''))
     parts = [np.asarray(r.audio, dtype=np.float32) for r in PIPELINES[lang](plain, voice=voice, speed=float(speed)) if r.audio is not None]
     audio = np.concatenate(parts)
     pitch = float(pitch)
@@ -431,6 +467,16 @@ def main():
         recorded[slug(who, text)] = cast[who]['voice']
         with open(CLIPS_FILE, 'w') as fh:
             json.dump(recorded, fh, indent=2)
+
+    # recordings of lines the game no longer says are removed, so the folders match the game
+    current = {slug(who, text) for who, text, _ in LINES}
+    for folder, ext in ((RAW, '.wav'), (OUT, '.mp3')):
+        for name in os.listdir(folder):
+            if name.endswith(ext) and name[:-len(ext)] not in current:
+                os.remove(os.path.join(folder, name))
+    recorded = {k: v for k, v in recorded.items() if k in current}
+    with open(CLIPS_FILE, 'w') as fh:
+        json.dump(recorded, fh, indent=2)
 
     clips = {}
     for who, text, _ in LINES:

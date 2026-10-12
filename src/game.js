@@ -1,8 +1,21 @@
 (function (PopoGame) {
 'use strict';
-const { assets, preloadBackground, clock, Effects, WaterScene, surfaceWave, PAN_OVERLAP, spawnFish, refreshShadows, LOCATIONS, STORY, matchesTarget, challengeFish, getShape, Popo, correctCatch, wrongCatch, travelTo, tutorial, opening, discovery, mouthOf, Cancelled, STAGE_W, STAGE_H, swimArea, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
+const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, spawnFish, refreshShadows, ShapeFish, ShadowFish, Swiftee, PALETTE, drawLabel, SCENE, FISH, LEVELS, RECALL, STORY, geometry, Popo, correctCatch, wrongCatch, finishLevel, closeCurtain, opening, mouthOf, Cancelled, STAGE_W, STAGE_H, swimArea, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
 
 const HINT_DELAY = 4;
+const TAU = Math.PI * 2;
+const LEARNED_KEY = 'popo-fishing-learned';
+
+const between = (a, b) => a + Math.random() * (b - a);
+const pick = (list) => list[Math.floor(Math.random() * list.length)];
+const shuffle = (list) => list.map((x) => [Math.random(), x]).sort((a, b) => a[0] - b[0]).map((p) => p[1]);
+
+// The angle recall card (before level 5): where it sits in the water, where its trapezium and
+// its straight line go on it, and the colours of the two angle pieces.
+const RECALL_CARD = { x: 1050, y: 598, w: 560, h: 400, diagram: -92, line: 78, pieces: ['#ffb347', '#ff7aa8'] };
+
+// The leaps into the bucket at the end: seconds between fish, and each leap's length.
+const LEAP = { gap: 0.13, time: 0.75 };
 
 // The title banner: its water surface, sand line, the open water the decorative fish swim
 // in, where the hooked fish splashes, and sparkle points along the logo's snowy edges.
@@ -12,16 +25,36 @@ const TITLE = {
   area: { left: 60, right: 1612, top: 680, bottom: 905 },
   // the play button floats in the middle of the banner's water; five shape fish circle it,
   // and a few more swim back and forth on the far left and right, clear of the orbit
-  play: { x: 836, y: 772, r: 112 },
-  orbit: { fish: ['triangle', 'square', 'pentagon', 'hexagon', 'circle'], rx: 270, ry: 92, speed: 0.55 },
+  play: { x: 836, y: 748, r: 108 },
+  orbit: { fish: ['triangle', 'octagon', 'pentagon', 'hexagon', 'circle'], rx: 270, ry: 92, speed: 0.55 },
   sides: [
-    { fish: ['rhombus', 'oval'], area: { left: 60, right: 500, top: 690, bottom: 900 } },
-    { fish: ['rectangle', 'semicircle'], area: { left: 1172, right: 1612, top: 690, bottom: 900 } },
+    { fish: ['triangle-right', 'oval'], area: { left: 60, right: 500, top: 690, bottom: 900 } },
+    { fish: ['decagon', 'semicircle'], area: { left: 1172, right: 1612, top: 690, bottom: 900 } },
   ],
-  splash: { left: 790, right: 980, y: 588 },
-  twinkles: [[884, 118], [1092, 86], [1360, 62], [1598, 142], [1588, 300], [962, 334]],
+  splash: { left: 760, right: 1010, y: 572 },
+  twinkles: [[906, 118], [1062, 66], [1242, 58], [1424, 90], [1598, 160], [1556, 336], [958, 318]],
 };
 
+
+// An angle's corner as a piece of pie: where it starts and how far it turns (always positive).
+function pieceOf({ a, b }) {
+  const start = Math.atan2(a[1], a[0]);
+  let sweep = Math.atan2(b[1], b[0]) - start;
+  sweep = Math.atan2(Math.sin(sweep), Math.cos(sweep));
+  return sweep < 0 ? { start: start + sweep, sweep: -sweep } : { start, sweep };
+}
+
+function drawPiece(ctx, at, { start, sweep }, radius, colour) {
+  ctx.beginPath();
+  ctx.moveTo(at[0], at[1]);
+  ctx.arc(at[0], at[1], Math.max(0.1, radius), start, start + sweep);
+  ctx.closePath();
+  ctx.fillStyle = colour;
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#14284b';
+  ctx.stroke();
+}
 
 class Game {
   constructor({ stage, ui, audio }) {
@@ -39,7 +72,6 @@ class Game {
     this.titleSplashIn = 0.8;
     this.raftRippleIn = 1;
     this.dialogue = null;
-    this.leaper = null;
     this.leapers = [];
     this.swiftee = null;
     this.poof = null;
@@ -47,26 +79,35 @@ class Game {
     this.ambient = [];
     this.hop = null;
     this.mark = null;
-    this.fishFade = 1;
     this.waterQuality = 1;
     this.frameAvg = 1 / 60;
     this.slowFor = 0;
     this.surfaceColors = [];
     this.tutorialPending = false;
-    this.waterline = LOCATIONS[0].waterline;
+    this.learned = false;
+    this.waterline = SCENE.waterline;
     this.area = swimArea(this.waterline);
-    this.transition = null;
+    this.decoys = [];
+    this.recall = null;
+    this.hookRing = null;
+    this.basket = null;
+    this.shadow = null; // the big shadow at the end
+    this.trash = null; // ...which is an old boot
+    this.iris = null;
+    this.ending = null;
+    this.comicReset();
     this.handFish = null;
     this.instructionRevert = 0;
     this.lastFrame = 0;
     this.running = false;
     ui.setScale(stage.scale);
+    ShapeFish.setStageScale(stage.scale);
   }
 
   // --- lifecycle ------------------------------------------------------------
   // The world renders behind the start screen as soon as the art is ready.
   showIdleScene() {
-    this.applyLocation();
+    this.applyScene();
     if (state.phase === PHASE.INTRO && !this.titleFish.length) {
       const orbit = spawnFish(TITLE.orbit.fish, TITLE.sides[0].area, 0.46);
       orbit.forEach((f, i) => { f.orbit = (i / orbit.length) * Math.PI * 2; });
@@ -88,20 +129,18 @@ class Game {
     resetProgress();
     this.ui.hideStart();
     this.ui.showHud();
-    this.applyLocation();
+    this.applyScene();
     this.ui.setHitsEnabled(false);
-    this.tutorialPending = true;
     opening(this);
     this.showIdleScene();
   }
 
   restart() {
     this.reset();
-    this.tutorialPending = true;
     opening(this);
   }
 
-  // Cancels every sequence and clears the scene back to the first location, ready to play.
+  // Cancels every sequence and clears the scene back to the start, ready to play.
   reset() {
     newToken();
     clock.cancelAll();
@@ -110,7 +149,6 @@ class Game {
     this.audio.stopVoice();
     this.audio.setTravel(false);
     this.instructionRevert = 0;
-    this.transition = null;
     this.ui.showPause(false);
     this.ui.hideHand();
     this.ui.clearHits();
@@ -124,9 +162,16 @@ class Game {
     this.ambient = [];
     this.hop = null;
     this.mark = null;
-    this.fishFade = 1;
+    this.recall = null;
+    this.hookRing = null;
+    this.basket = null;
+    this.shadow = null;
+    this.trash = null;
+    this.iris = null;
+    this.ending = null;
+    this.comicReset();
+    this.tutorialPending = false;
     this.endLine();
-    this.leaper = null;
     this.swiftee = null;
     this.leapers = [];
     this.poof = null;
@@ -135,7 +180,7 @@ class Game {
     this.ui.setInstruction('');
     this.ui.el.hud.inert = false;
     this.nextNudge = 3;
-    this.applyLocation();
+    this.applyScene();
   }
 
   dispose() {
@@ -143,7 +188,6 @@ class Game {
     newToken();
     clock.cancelAll();
     this.audio.setTravel(false);
-    this.transition = null;
     this.handFish = null;
     this.instructionRevert = 0;
     this.fx.clearTransient();
@@ -157,11 +201,9 @@ class Game {
     state.phase = PHASE.INTRO;
   }
 
-  applyLocation() {
-    const loc = LOCATIONS[state.locationIndex];
-    this.setWaterline(loc.waterline);
-    this.fx.setLocation(loc.background);
-    if (state.locationIndex + 1 < LOCATIONS.length) preloadBackground(LOCATIONS[state.locationIndex + 1].background);
+  applyScene() {
+    this.setWaterline(SCENE.waterline);
+    this.fx.setLocation(SCENE.background);
   }
 
   setWaterline(y) {
@@ -172,49 +214,88 @@ class Game {
     this.popo.setAnchor(a.x, a.y);
   }
 
-  locationWaterline(index) {
-    return LOCATIONS[index].waterline;
+  level() {
+    return LEVELS[state.level];
   }
 
-  currentChallenge() {
-    return LOCATIONS[state.locationIndex].challenges[state.challengeIndex];
-  }
-
-  spawnChallengeFish() {
-    const ch = this.currentChallenge();
-    state.target = ch.target;
+  // A level's school: `targets` fish to catch among distractors, all out of view at first and
+  // swimming in from either side one after another, in no particular order.
+  startLevel(index) {
+    state.level = index;
+    state.levelCaught = 0;
+    state.used = new Set();
     state.selectedFish = null;
-    state.fish = spawnFish(challengeFish(ch), this.area, ch.fishScale || 1);
-    // fewer background shadows when the challenge itself is busy
-    this.ambient = refreshShadows(this.ambient, Math.max(3, Math.min(5, 8 - state.fish.length)), this.area);
+    state.fish = [];
+    this.decoys = [];
+    const level = this.level();
+    for (let i = 0; i < level.school; i += 1) this.addFish(i < level.targets);
+    const delays = shuffle(state.fish.map((f, i) => i * 0.45 + Math.random() * 0.3));
+    state.fish.forEach((f, i) => f.goOffstage(delays[i]));
+    this.ambient = refreshShadows(this.ambient, 3, this.area);
     state.idleTime = 0;
     state.hintShown = false;
-    this.ui.setInstruction(this.challengeText());
+    this.instructionRevert = 0;
+    this.ui.setInstruction(level.instruction);
   }
 
-  challengeText() {
-    const ch = this.currentChallenge();
-    const name = getShape(ch.target).name.toLowerCase();
-    return ch.all ? `Catch all the *${name}* fish!` : `Catch the *${name}* fish!`;
+  // One more fish for the level: a catch not seen yet this level, or the next distractor (they
+  // come round in a shuffled order). Its colour is never one already swimming, and colour never
+  // tells a catch from a distractor.
+  addFish(correct, away = 0) {
+    const level = this.level();
+    const pool = FISH.filter((f) => f.level === state.level + 1 && f.correct === correct);
+    let spec;
+    if (correct) {
+      const fresh = pool.filter((f) => !state.used.has(f.id));
+      spec = pick(fresh.length ? fresh : pool);
+      state.used.add(spec.id);
+    } else {
+      if (!this.decoys.length) this.decoys = shuffle(pool);
+      spec = this.decoys.pop();
+    }
+    const taken = new Set(state.fish.filter((f) => !f.gone).map((f) => f.colour));
+    const colours = PALETTE.filter((c) => !taken.has(c));
+    const fish = new ShapeFish(spec, level, {
+      colour: pick(colours.length ? colours : PALETTE),
+      size: between(...level.sizes),
+      speed: between(...level.speed),
+    });
+    fish.goOffstage(away);
+    state.fish.push(fish);
+    return fish;
   }
 
-
-  // A wrong catch keeps the instruction but names the fish that was tapped.
-  wrongText(fish) {
-    return `${this.challengeText().replace(/!$/, '')}, not the ${fish.shape.name.toLowerCase()} one!`;
+  // After a catch, another fish to catch swims in while the level needs more than are left, and
+  // distractors keep the school from thinning out below `least`.
+  topUpSchool() {
+    const level = this.level();
+    state.fish = state.fish.filter((f) => !f.gone);
+    const needed = level.catches - state.levelCaught;
+    if (this.remainingTargets().length < Math.min(level.targets, needed)) this.addFish(true, between(0.4, 1.2));
+    while (state.fish.length < level.least) this.addFish(false, between(0.8, 1.8));
   }
 
+  // After a wrong catch the narrator reads the hint, once nobody else is talking.
+  speakHint() {
+    if (!this.dialogue) this.audio.speak('narrator', this.level().hint);
+  }
+
+  // Popo's beats after a wrong catch: the level's own (level 5's from the handoff), else the usual.
+  wrongLine() {
+    const { oops } = this.level();
+    return oops ? oops.map((text) => ({ who: 'popo', text })) : STORY.wrong;
+  }
 
   remainingTargets() {
-    return state.fish.filter((f) => !f.gone && matchesTarget(f.key, state.target));
+    return state.fish.filter((f) => !f.gone && f.correct);
   }
 
   inViewTarget() {
     return this.remainingTargets().find((f) => !f.offstage && !f.escaping) || null;
   }
 
-  // Fish swim in and out of view; while a challenge is on, at least one fish still to catch
-  // is always swimming in sight, and the tutorial hand moves to it when its fish swims off.
+  // Fish swim in and out of view; while a level is on, at least one fish still to catch is
+  // always swimming in sight, and the tutorial hand moves to it when its fish swims off.
   keepTargetsInView() {
     if (state.phase !== PHASE.READY && state.phase !== PHASE.TUTORIAL) return;
     const left = this.remainingTargets();
@@ -228,68 +309,63 @@ class Game {
     }
   }
 
-  // After a catch: a catch-all challenge carries on while matching fish remain.
+  // After a catch: the level carries on until its catches are done.
   afterCatch() {
-    if (this.currentChallenge().all && this.remainingTargets().length > 0) {
-      state.selectedFish = null;
-      state.idleTime = 0;
-      state.hintShown = false;
-      this.ui.setInstruction(this.challengeText());
-      state.phase = PHASE.READY;
-      this.ui.setHitsEnabled(true);
+    if (state.levelCaught < this.level().catches) {
+      this.topUpSchool();
+      this.play();
       return;
     }
-    this.nextChallenge();
+    finishLevel(this);
   }
 
-  setupChallenge() {
-    this.spawnChallengeFish();
-    if (!this.currentChallenge().tutorial) {
-      this.tutorialPending = false;
-      this.showHandOn(null);
-      this.ui.hideHand();
-    }
+  // Fishing is on: the level's instruction is back and the fish can be tapped.
+  play() {
+    const level = this.level();
+    state.selectedFish = null;
+    state.idleTime = 0;
+    state.hintShown = false;
+    this.ui.setInstruction(level.instruction);
     state.phase = PHASE.READY;
     this.ui.setHitsEnabled(true);
-    this.speakInstruction();
   }
 
   // Reads the instruction aloud (when it has a recording) for children who can't read it yet.
   speakInstruction() {
-    if (!this.dialogue) this.audio.speak('narrator', this.challengeText());
+    if (!this.dialogue) this.audio.speak('narrator', this.level().instruction);
   }
 
-  nextChallenge() {
-    const loc = LOCATIONS[state.locationIndex];
-    state.challengeIndex += 1;
-    if (state.challengeIndex < loc.challenges.length) {
-      this.setupChallenge();
-    } else if (state.locationIndex + 1 < LOCATIONS.length) {
-      travelTo(this, state.locationIndex + 1);
-    } else if (STORY.ending) {
-      discovery(this);
-    } else {
-      this.complete();
+  // The first-time reminder about the rod shows until the learner's first right catch, then
+  // never again on this device.
+  controlsLearned() {
+    if (!this.learned) {
+      try { this.learned = localStorage.getItem(LEARNED_KEY) === '1'; } catch (e) { /* storage may be unavailable */ }
     }
+    return this.learned;
   }
 
-  // Next, after Swiftee's line, closes the story and opens the summary.
+  learnControls() {
+    this.learned = true;
+    try { localStorage.setItem(LEARNED_KEY, '1'); } catch (e) { /* storage may be unavailable */ }
+  }
+
+  // Next, at the end: the iris shuts and the activity ends.
   next() {
     if (!this.awaitingNext || state.paused) return;
     this.awaitingNext = false;
     if (this.swiftee) this.swiftee.onDownstroke = null;
     this.ui.hideNext();
     this.endLine(false);
-    this.complete();
+    closeCurtain(this);
   }
 
-  // The end of the journey: tell any page hosting the game, then go back to the title, ready
-  // to play again (there is no end screen).
+  // The end of the activity: tell any page hosting the game (its map), then go back to the
+  // title, ready to play again.
   complete() {
     state.phase = PHASE.COMPLETE;
     this.ui.setHitsEnabled(false);
     this.audio.play('complete');
-    const detail = { shapes: [...state.discovered] };
+    const detail = { catches: state.collected.length, levels: LEVELS.length };
     window.dispatchEvent(new CustomEvent('popo:complete', { detail }));
     if (window.parent !== window) window.parent.postMessage({ type: 'popo:complete', ...detail }, '*');
     this.backToTitle();
@@ -304,8 +380,9 @@ class Game {
   }
 
   collect(fish) {
-    state.collected.push(fish.key);
-    state.discovered.add(fish.shape.shape);
+    state.collected.push(fish);
+    state.levelCaught += 1;
+    this.learnControls();
   }
 
   // --- input ----------------------------------------------------------------
@@ -447,14 +524,37 @@ class Game {
     this.clearHint();
     this.puffFrom(fish, 4, true);
     this.instructionRevert = 0;
-    this.ui.setInstruction(this.challengeText());
-    if (matchesTarget(fish.key, state.target)) {
+    this.hookRing = null;
+    this.ui.setInstruction(this.level().instruction);
+    if (fish.correct) {
       this.tutorialPending = false;
       if (this.handFish) { this.ui.hideHand(); this.handFish = null; }
       correctCatch(this, fish);
     } else {
       wrongCatch(this, fish);
     }
+  }
+
+  // Where the tutorial hand's fingertip touches its fish: the middle of the body.
+  handPoint() {
+    return [this.handFish.x + 6, this.handFish.y + this.handFish.h * 0.06];
+  }
+
+  // A soft ripple spreads from the fingertip each time the hand taps (in step with its CSS tap).
+  drawHandRipple(ctx) {
+    if (!this.handFish || this.handFish.gone || this.handFish.offstage || this.ui.el.hand.hidden || this.fx.reduced) return;
+    const tap = this.ui.el.hand.getAnimations ? this.ui.el.hand.getAnimations()[0] : null;
+    const phase = tap && tap.currentTime !== null ? (tap.currentTime % 1100) / 1100 : (this.fx.t % 1.1) / 1.1;
+    const k = (phase - 0.45) / 0.55;
+    if (k <= 0) return;
+    const [x, y] = this.handPoint();
+    ctx.save();
+    ctx.strokeStyle = `rgba(255, 255, 255, ${(0.85 * (1 - k)).toFixed(3)})`;
+    ctx.lineWidth = 4 * (1 - k) + 1;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 8 + k * 34, (8 + k * 34) * 0.7, 0, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
   }
 
   showHandOn(fish) {
@@ -489,9 +589,11 @@ class Game {
   resize() {
     this.stage.resize();
     this.ui.setScale(this.stage.scale);
+    ShapeFish.setStageScale(this.stage.scale);
+    for (const f of state.fish) if (f.setZoom) f.setZoom(ShapeFish.zoom);
     // keep the bubble and the hint hand on their targets even while paused
-    if (this.dialogue && this.dialogue.who !== 'narrator') this.placeSpeech();
-    if (this.handFish && !this.handFish.gone) this.ui.moveHand(this.handFish.x + 10, this.handFish.y + this.handFish.h * 0.3);
+    if (this.dialogue) this.placeSpeech();
+    if (this.handFish && !this.handFish.gone) this.ui.moveHand(...this.handPoint());
     this.ui.showRotateHint(this.stage.portrait);
     this.syncWaterCanvas();
   }
@@ -513,7 +615,7 @@ class Game {
     }
   }
 
-  // Shows feedback for a while, then brings the challenge instruction back.
+  // Shows feedback for a while, then brings the level's instruction back.
   revertInstructionIn(ms) {
     this.instructionRevert = ms;
   }
@@ -522,7 +624,7 @@ class Game {
     if (this.instructionRevert <= 0) return;
     this.instructionRevert -= dt * 1000;
     if (this.instructionRevert <= 0 && state.phase === PHASE.READY) {
-      this.ui.setInstruction(this.challengeText());
+      this.ui.setInstruction(this.level().instruction);
     }
   }
 
@@ -549,19 +651,6 @@ class Game {
     }
   }
 
-  // --- travel -----------------------------------------------------------------
-  async prepareTransition(nextIndex, token) {
-    await preloadBackground(LOCATIONS[nextIndex].background);
-    if (isCurrent(token)) this.transition = { from: state.locationIndex, to: nextIndex, k: 0 };
-  }
-
-  finishTransition(nextIndex) {
-    this.transition = null;
-    state.locationIndex = nextIndex;
-    state.challengeIndex = 0;
-    this.applyLocation();
-  }
-
   // --- loop -------------------------------------------------------------------
   loop(now) {
     if (!this.running) return;
@@ -583,25 +672,27 @@ class Game {
     return new Promise((resolve, reject) => {
       if (this.dialogue) this.endLine();
       const words = line.text.split(' ').map((raw) => ({ text: raw.replace(/\*/g, ''), em: raw.includes('*') }));
-      const narrator = line.who === 'narrator';
       this.dialogue = {
-        words, who: line.who, cue: line.cue, cueDone: false, token, resolve, reject, stay: !!line.stay, settled: false,
+        words, who: line.who, cues: [].concat(line.cue || []).map((c) => ({ ...c })), token, resolve, reject, stay: !!line.stay, settled: false,
         next: 0, wait: 0, held: 0,
-        pace: narrator ? 0.21 : 0.17,
-        hold: (narrator ? 1000 : 700) + line.text.length * (narrator ? 26 : 22),
+        pace: 0.17,
+        hold: 1000 + line.text.length * 24,
       };
       this.ui.showLine(line.who, words);
       this.placeSpeech();
       const voiced = this.audio.speak(line.who, line.text);
       if (voiced) this.paceToVoice(this.dialogue, voiced);
-      else if (narrator) this.audio.play('narrate');
     });
   }
 
   // Spreads the words over the recording by length, with a beat after punctuation, so each
   // word appears as it's spoken. The bubble stays up a moment after the voice finishes.
   paceToVoice(d, seconds) {
-    const weight = (w) => Math.max(2, w.text.replace(/[^a-z0-9']/gi, '').length)
+    // roughly how long each word takes to say: numbers and symbols are read as words
+    // ("110°" is "one hundred and ten degrees", "+" is "plus")
+    const said = (t) => (/\d/.test(t) ? t.replace(/\D/g, '').length * 6 + (t.includes('°') ? 7 : 0)
+      : t === '+' ? 4 : t === '=' ? 6 : t.replace(/[^a-z0-9']/gi, '').length);
+    const weight = (w) => Math.max(2, said(w.text))
       + (w.text.endsWith('…') ? 5 : /[.!?]$/.test(w.text) ? 3 : w.text.endsWith(',') ? 2 : 0);
     const total = d.words.reduce((sum, w) => sum + weight(w), 0);
     let at = 0;
@@ -612,7 +703,8 @@ class Game {
     });
     d.elapsed = 0;
     d.voiced = true;
-    d.hold = Math.max(450, (seconds - d.times[d.times.length - 1]) * 1000 + 550);
+    // after the voice ends, the bubble stays long enough for a young reader to finish it
+    d.hold = (seconds - d.times[d.times.length - 1]) * 1000 + Math.max(900, d.words.length * 130);
   }
 
   placeSpeech() {
@@ -634,6 +726,7 @@ class Game {
   endLine(cancelled = true) {
     const dialogue = this.dialogue;
     this.dialogue = null;
+    if (this.swiftee) this.swiftee.speaking = false;
     this.ui.hideLines();
     if (dialogue && dialogue.voiced && cancelled) this.audio.stopVoice();
     if (dialogue) {
@@ -646,14 +739,14 @@ class Game {
     const i = d.next;
     const word = d.words[i];
     this.ui.revealWord(i, word.em);
-    const cued = d.cue && !d.cueDone && d.cue.word <= i;
-    if (!quiet && !cued) {
+    const due = d.cues.filter((c) => !c.done && c.word <= i);
+    if (!quiet && !due.length) {
       try { this.audio.play(word.em ? 'boing' : ({ popo: 'talk', swiftee: 'chirp' })[d.who] || 'word'); }
       catch (e) { /* Optional audio must not stall dialogue or retain input locks. */ }
     }
-    if (d.cue && !d.cueDone && d.cue.word <= i) {
-      d.cueDone = true;
-      this.storyCue(d.cue.do);
+    for (const c of due) {
+      c.done = true;
+      this.storyCue(c.do);
     }
     d.next += 1;
     const last = word.text.slice(-1);
@@ -697,7 +790,17 @@ class Game {
         d.resolve();
       }
     }
-    if (d.who !== 'narrator') this.placeSpeech();
+    this.placeSpeech();
+  }
+
+  // A run of short comic beats, one bubble after another. onLine(i) runs as beat i starts.
+  async sayAll(lines, token, onLine = () => {}) {
+    const beats = [].concat(lines);
+    for (let i = 0; i < beats.length; i += 1) {
+      if (i) await clock.wait(300, token); // a breath between beats
+      onLine(i);
+      await this.say(beats[i], token);
+    }
   }
 
   // Moments in the scene that a story line can trigger on one of its words.
@@ -711,8 +814,13 @@ class Game {
     } else if (name === 'wonder') {
       this.mark = { char: '?', t: 0, colour: '#7fd8ff' };
       this.audio.play('hmm');
-    } else if (name === 'fishIn') {
-      this.fishIn();
+    } else if (name === 'recallCard') {
+      this.showRecall();
+      this.audio.play('poof');
+    } else if (name === 'recallLeg') {
+      this.recallStep('leg');
+    } else if (name === 'recallSum') {
+      this.recallStep('sum');
     } else if (name === 'twirl' && this.swiftee) {
       if (!this.fx.reduced) this.swiftee.twirl();
       this.fx.sparkle(this.swiftee.x, this.swiftee.y - 40, 8);
@@ -720,34 +828,22 @@ class Game {
     }
   }
 
-  // The challenge fish (and the scenery fish) fade in with a shimmer of bubbles and sparkles.
-  fishIn() {
-    if (state.fish.length) return;
-    this.spawnChallengeFish();
-    this.fishFade = 0;
-    for (const f of state.fish) f.alpha = 0;
-    for (const f of this.ambient) f.fade = 0;
-    for (const f of state.fish) {
-      this.fx.puff(f.x, f.y, 0, 4, true);
-      this.fx.sparkle(f.x, f.y - f.h * 0.4, 6);
-    }
-    this.audio.play('cheer');
-  }
-
   updateStoryFx(dt) {
-    if (this.fishFade < 1) {
-      this.fishFade = Math.min(1, this.fishFade + dt / 0.6);
-      for (const f of state.fish) f.alpha = this.fishFade;
-      for (const f of this.ambient) f.fade = this.fishFade;
-    }
+    if (this.recall) this.updateRecall(dt);
+    if (this.hookRing) this.hookRing.t += dt;
+    if (this.basket) this.updateBasket(dt);
+    if (this.shadow) this.shadow.update(dt, this.area);
+    this.updateComic(dt);
+    if (this.trash) this.updateTrash(dt);
+    if (this.ending) this.ending.t += dt;
     if (this.hop) {
       // a happy hop: up out of the water, then a splash down
       this.hop.t += dt;
       const k = this.hop.t / 0.5;
       if (k < 1) {
-        this.popo.dip = -18 * Math.sin(Math.PI * k);
+        this.popo.actorLift = this.fx.reduced ? 0 : -12 * Math.sin(Math.PI * k);
       } else {
-        this.popo.dip = 0;
+        this.popo.actorLift = 0;
         this.hop = null;
         const p = this.popo.placement('fishing', 'idle');
         this.fx.splash((p.raftLeftX + p.raftRightX) / 2, this.waterline, false);
@@ -841,7 +937,7 @@ class Game {
 
   // Average colour of the painted water just below the surface, for the water over the raft.
   surfaceColor() {
-    const index = LOCATIONS[state.locationIndex].background;
+    const index = SCENE.background;
     if (this.surfaceColors[index]) return this.surfaceColors[index];
     const img = assets.backgrounds[index];
     if (!img) return null;
@@ -972,6 +1068,13 @@ class Game {
   update(dt) {
     if (state.phase === PHASE.INTRO || this.titleFade > 0) this.updateTitle(dt);
     clock.update(dt);
+    const speaking = this.dialogue && !this.dialogue.settled &&
+      (this.dialogue.next < this.dialogue.words.length || this.dialogue.held < 250);
+    if (this.swiftee) {
+      this.swiftee.speaking = !!speaking && this.dialogue.who === 'swiftee';
+      this.swiftee.teaching = !!this.recall && this.recall.t > 1;
+      this.swiftee.celebrating = this.awaitingNext;
+    }
     this.popo.update(dt);
     this.fx.update(dt);
     this.popo.waterResponse = this.fx.raftResponse(this.popo.anchor.x);
@@ -983,6 +1086,7 @@ class Game {
       if (this.nextNudge <= 0) {
         this.nextNudge = 3.4;
         this.swiftee.hop();
+        this.popo.act('dance');
         this.audio.play('chirp');
       }
     }
@@ -1006,83 +1110,259 @@ class Game {
     }
     if (this.ambient.some((f) => f.gone)) this.ambient = this.ambient.filter((f) => !f.gone);
     for (const f of this.ambient) f.update(dt, this.area);
+    const hookOut = this.popo.line.mode === 'flight' || this.popo.line.mode === 'attached';
+    for (const f of state.fish) f.gaze = hookOut ? this.popo.line.hook : null;
     if (this.popo.line.mode === 'attached' && state.selectedFish) {
       const m = mouthOf(state.selectedFish);
       this.popo.line.hook.x = m.x;
       this.popo.line.hook.y = m.y;
     }
     this.keepTargetsInView();
-    if (this.handFish && !this.handFish.gone) this.ui.moveHand(this.handFish.x + 10, this.handFish.y + this.handFish.h * 0.3);
+    if (this.handFish && !this.handFish.gone) this.ui.moveHand(...this.handPoint());
     this.updateHint(dt);
     this.updateInstruction(dt);
   }
 
   // The painting goes through the per-pixel water pass (src/water.js); without WebGL it is
-  // drawn plainly. Returns the ambient drift the underwater effects follow during a row.
+  // drawn plainly.
   drawBackground(ctx) {
-    const index = LOCATIONS[state.locationIndex].background;
-    const current = assets.backgrounds[index];
-    if (!current) { preloadBackground(index); return 0; }
-    const k = this.transition ? this.transition.k : 0;
-    const next = this.transition ? assets.backgrounds[LOCATIONS[this.transition.to].background] : null;
+    const painting = assets.backgrounds[SCENE.background];
+    if (!painting) { preloadBackground(SCENE.background); return; }
     if (this.water.ok) {
       this.syncWaterCanvas();
       const drawn = this.water.render({
-        from: current, to: next, mix: k, time: this.fx.t, waterline: this.waterline,
-        plants: this.fx.plantsFor(index), amplitude: this.fx.reduced ? 0.35 : 1,
+        from: painting, to: null, mix: 0, time: this.fx.t, waterline: this.waterline,
+        plants: this.fx.plantsFor(SCENE.background), amplitude: this.fx.reduced ? 0.35 : 1,
       });
       if (drawn) {
         this.water.show(true);
-        return -Math.sin(k * Math.PI) * 18;
+        return;
       }
     }
     this.water.show(false);
-    this.drawPaintingPlain(ctx, current, next, k);
-    return 0;
+    ctx.drawImage(painting, 0, 0, STAGE_W, STAGE_H);
   }
 
-  // Fallback for browsers without WebGL: the painting drawn plainly; during a row the two
-  // paintings slide with depth parallax and a feathered seam.
-  drawPaintingPlain(ctx, current, next, k) {
-    if (next) this.drawParallaxPlain(ctx, current, next, k);
-    else ctx.drawImage(current, 0, 0, STAGE_W, STAGE_H);
+  // --- the angle recall card, the hook reminder and the basket ---------------------------------
+  // The card opens empty; recallStep('leg') lights the leg and brings in each angle, and
+  // recallStep('sum') the sum, each timed from when it's called (so they follow Swiftee's beats).
+  showRecall() {
+    this.recall = { t: 0, leaving: 0, leg: Infinity, angles: [Infinity, Infinity], sum: Infinity, popped: [], chimed: false,
+      marks: geometry.layoutMarks(RECALL.body, 30, ['angles'], { corners: RECALL.corners, font: 30 }) };
   }
 
-  featheredCopy(img) {
-    if (this.featheredSource === img) return this.feathered;
-    const c = document.createElement('canvas');
-    c.width = STAGE_W;
-    c.height = STAGE_H;
-    const cx = c.getContext('2d');
-    cx.drawImage(img, 0, 0, STAGE_W, STAGE_H);
-    const mask = cx.createLinearGradient(0, 0, PAN_OVERLAP, 0);
-    mask.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    mask.addColorStop(1, 'rgba(0, 0, 0, 1)');
-    cx.globalCompositeOperation = 'destination-in';
-    cx.fillStyle = mask;
-    cx.fillRect(0, 0, PAN_OVERLAP, STAGE_H);
-    cx.fillStyle = '#000';
-    cx.fillRect(PAN_OVERLAP, 0, STAGE_W - PAN_OVERLAP, STAGE_H);
-    this.feathered = c;
-    this.featheredSource = img;
-    return c;
+  recallStep(step) {
+    const r = this.recall;
+    if (!r) return;
+    if (step === 'leg') Object.assign(r, { leg: r.t + 0.05, angles: [r.t + 0.6, r.t + 1.2] });
+    if (step === 'sum') r.sum = r.t + 0.1;
   }
 
-  drawParallaxPlain(ctx, current, next, k) {
-    const pan = STAGE_W - PAN_OVERLAP;
-    const ox = -k * pan;
-    ctx.drawImage(current, ox, 0, STAGE_W, STAGE_H);
+  // As the two pieces land together on the line: a ta-da and a little sparkle.
+  updateRecall(dt) {
+    const r = this.recall;
+    r.t += dt;
+    for (const [i, at] of r.angles.entries()) {
+      if (r.t >= at && !r.popped[i]) { r.popped[i] = true; this.audio.play('boing'); }
+    }
+    if (r.t >= r.sum + 0.75 && !r.chimed) {
+      r.chimed = true;
+      this.audio.play('tada');
+      this.fx.sparkle(RECALL_CARD.x, RECALL_CARD.y + RECALL_CARD.line - 40, 12);
+    }
+    if (r.leaving && (r.leaving += dt) > 0.35) this.recall = null;
+  }
+
+  hideRecall() {
+    if (this.recall) this.recall.leaving = 0.001;
+  }
+
+  // One trapezium on a card. Its left leg lights up and a coloured piece pops into the angle at
+  // each end of it; then the two pieces fly out and snap together on a straight line, which is
+  // 180°, and the sum bounces in. The angles are measured from the drawn trapezium.
+  drawRecall(ctx) {
+    const r = this.recall;
+    if (!r) return;
+    const { x, y, w, h, diagram, line, pieces } = RECALL_CARD;
+    const { px, arcs, labels } = r.marks;
+    const at = (start, length = 0.35) => Math.max(0, Math.min(1, (r.t - start) / length));
+    const still = this.fx.reduced;
     ctx.save();
-    ctx.translate(ox + STAGE_W * 2, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(current, 0, 0, STAGE_W, STAGE_H);
+    ctx.globalAlpha = Math.min(1, r.t / 0.2) * (r.leaving ? Math.max(0, 1 - r.leaving / 0.35) : 1);
+    ctx.translate(x, y);
+    const pop = still ? 1 : ease.outBack(at(0, 0.4));
+    ctx.scale(pop, pop);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.roundRect(-w / 2, -h / 2, w, h, 30);
+    ctx.fillStyle = 'rgba(0, 20, 60, 0.22)';
+    ctx.save();
+    ctx.translate(0, 9);
+    ctx.fill();
     ctx.restore();
-    const ease = (a, b, x) => { const v = Math.min(1, Math.max(0, (x - a) / (b - a))); return v * v * (3 - 2 * v); };
-    ctx.globalAlpha = ease(0, 0.07, k);
-    ctx.drawImage(this.featheredCopy(next), ox + pan, 0, STAGE_W, STAGE_H);
-    ctx.globalAlpha = ease(0.93, 1, k);
-    if (ctx.globalAlpha > 0) ctx.drawImage(next, 0, 0, STAGE_W, STAGE_H);
-    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#fff8e8';
+    ctx.fill();
+    ctx.lineWidth = 4.5;
+    ctx.strokeStyle = '#3b1d00';
+    ctx.stroke();
+    ctx.save();
+    ctx.translate(0, diagram);
+    ctx.beginPath();
+    px.forEach(([px0, py0], i) => (i ? ctx.lineTo(px0, py0) : ctx.moveTo(px0, py0)));
+    ctx.closePath();
+    ctx.fillStyle = '#d6edff';
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#14284b';
+    ctx.stroke();
+    // the leg, from D up to A, with a little glow while it's the star
+    const k = at(r.leg, 0.4);
+    if (k > 0) {
+      const [d, a] = [px[0], px[3]];
+      const glow = still ? 0 : Math.max(0, Math.sin((r.t - r.leg) * 6)) * (1 - at(r.leg + 1.2, 0.6));
+      ctx.beginPath();
+      ctx.moveTo(d[0], d[1]);
+      ctx.lineTo(d[0] + (a[0] - d[0]) * k, d[1] + (a[1] - d[1]) * k);
+      ctx.lineWidth = 9 + glow * 5;
+      ctx.strokeStyle = '#ff5d8f';
+      ctx.stroke();
+    }
+    arcs.forEach((arc, i) => {
+      const shown = at(r.angles[i], 0.3);
+      if (shown <= 0) return;
+      const grow = still ? 1 : ease.outBack(shown);
+      drawPiece(ctx, arc.at, pieceOf(arc), 36 * grow, pieces[i]);
+      ctx.globalAlpha *= shown;
+      drawLabel(ctx, labels[i].text, labels[i].at[0], labels[i].at[1], 30 * grow);
+      ctx.globalAlpha /= shown;
+    });
+    ctx.restore();
+    // the two pieces fly down and snap together on the line: a straight angle
+    const fly = at(r.sum, 0.75);
+    if (fly > 0) {
+      const e = still ? 1 : ease.outBack(fly);
+      let start = Math.PI;
+      arcs.forEach((arc, i) => {
+        const from = pieceOf(arc);
+        const sweep = from.sweep;
+        const to = { start: start, sweep };
+        start += sweep;
+        let turn = to.start - from.start;
+        turn = Math.atan2(Math.sin(turn), Math.cos(turn));
+        const cx = arc.at[0] * (1 - e);
+        const cy = (arc.at[1] + diagram) * (1 - e) + line * e - Math.sin(fly * Math.PI) * 30;
+        drawPiece(ctx, [cx, cy], { start: from.start + turn * e, sweep }, 36 + 22 * e, pieces[i]);
+      });
+      const landed = at(r.sum + 0.7, 0.25);
+      if (landed > 0) {
+        ctx.globalAlpha *= landed;
+        ctx.beginPath();
+        ctx.moveTo(-96, line);
+        ctx.lineTo(96, line);
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = '#14284b';
+        ctx.stroke();
+        drawLabel(ctx, `${arcs[0].degrees + arcs[1].degrees}°`, 0, line - 76, 30);
+        ctx.globalAlpha /= landed;
+      }
+    }
+    const shown = at(r.sum + 0.85, 0.4);
+    if (shown > 0) {
+      const text = `${arcs[0].degrees}° + ${arcs[1].degrees}° = ${arcs[0].degrees + arcs[1].degrees}°`;
+      ctx.translate(0, h / 2 - 50);
+      const grow = still ? 1 : 0.8 + 0.2 * ease.outBack(shown);
+      ctx.scale(grow, grow);
+      ctx.globalAlpha *= shown;
+      ctx.font = '700 34px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
+      const tw = ctx.measureText(text).width + 44;
+      ctx.beginPath();
+      ctx.roundRect(-tw / 2, -27, tw, 54, 27);
+      ctx.fillStyle = '#ffe066';
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#3b1d00';
+      ctx.stroke();
+      ctx.fillStyle = '#3b1d00';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 0, 2);
+    }
+    ctx.restore();
+  }
+
+  // The first-time reminder circles the hook with a slowly turning dashed ring.
+  drawHookRing(ctx) {
+    const ring = this.hookRing;
+    const hook = ring && this.popo.hookPosition();
+    if (!hook) return;
+    const pulse = this.fx.reduced ? 0 : (Math.sin(ring.t * 4) + 1) / 2;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, ring.t / 0.3);
+    ctx.setLineDash([8, 7]);
+    ctx.lineDashOffset = -ring.t * 18;
+    ctx.lineWidth = 3.4;
+    ctx.strokeStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(0, 30, 80, 0.45)';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.arc(hook.x - 4, hook.y + 8, 27 + pulse * 5, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // At the end every fish caught leaps out of the water, one after another, high over Popo and
+  // down into his bucket, out of sight inside it.
+  fillBasket() {
+    this.basket = { t: 0 };
+  }
+
+  leapFrom(i) {
+    return { x: this.popo.anchor.x + 210 + (i % 4) * 46, y: this.waterline + 6 };
+  }
+
+  basketDuration() {
+    return (state.collected.length - 1) * LEAP.gap + LEAP.time;
+  }
+
+  // Splashes as the fish leave the water and a sparkle as they land; a chime for every few.
+  updateBasket(dt) {
+    const b = this.basket;
+    const before = b.t;
+    b.t += dt;
+    state.collected.forEach((fish, i) => {
+      const start = i * LEAP.gap;
+      if (before < start && b.t >= start) this.fx.splash(this.leapFrom(i).x, this.waterline, false);
+      if (before < start + LEAP.time && b.t >= start + LEAP.time) {
+        const rim = this.popo.bucketRim();
+        this.fx.sparkle(rim.x, rim.y - 12, 4);
+        if (i % 4 === 3 || i === state.collected.length - 1) this.audio.play('collect');
+      }
+    });
+  }
+
+  drawLeaps(ctx) {
+    const b = this.basket;
+    if (!b) return;
+    const rim = this.popo.bucketRim();
+    ctx.save();
+    // everything except the inside of the bucket
+    ctx.beginPath();
+    ctx.rect(0, 0, STAGE_W, STAGE_H);
+    ctx.rect(rim.x - 30, rim.y, 60, 80);
+    ctx.clip('evenodd');
+    const peak = rim.y - 430; // the arc clears Popo's head
+    state.collected.forEach((fish, i) => {
+      const k = (b.t - i * LEAP.gap) / LEAP.time;
+      if (k <= 0 || k >= 1) return;
+      const from = this.leapFrom(i);
+      const to = { x: rim.x, y: rim.y + 24 };
+      const x = from.x + (to.x - from.x) * k;
+      const y = (1 - k) ** 2 * from.y + 2 * (1 - k) * k * peak + k * k * to.y;
+      const dy = 2 * (1 - k) * (peak - from.y) + 2 * k * (to.y - peak);
+      fish.drawMini(ctx, x, y, 68, Math.atan2(dy, to.x - from.x) * 0.5 + Math.PI * 0.1, true);
+    });
+    ctx.restore();
   }
 
   // The play button floats in the water: a gentle bob and sway, a breathing warm glow behind
@@ -1199,14 +1479,15 @@ class Game {
       this.drawTitle(ctx, 1);
       return;
     }
-    const offset = this.drawBackground(ctx);
-    this.fx.drawWater(ctx, offset, state.fish);
+    this.drawBackground(ctx);
+    this.fx.drawWater(ctx, 0, state.fish);
     for (const f of this.ambient) f.draw(ctx);
+    if (this.shadow) this.shadow.draw(ctx);
+    this.drawSpeedLines(ctx);
     // a hooked fish goes between the hook and the line: the line runs over it to its lips and
     // the hook sits inside its mouth
     const hooked = this.popo.line.mode === 'attached' ? state.selectedFish : null;
     for (const f of state.fish) if (f !== hooked) f.draw(ctx);
-    if (this.leaper) this.leaper.draw(ctx);
     for (const f of this.leapers) f.draw(ctx);
     this.fx.drawSplashLayer(ctx, false);
     if (hooked) {
@@ -1214,16 +1495,418 @@ class Game {
       hooked.draw(ctx);
       this.popo.drawLine(ctx, 'line');
     } else {
+      this.drawTrash(ctx);
       this.popo.drawLine(ctx);
     }
+    this.drawHandRipple(ctx);
     this.popo.draw(ctx);
+    this.drawLeaps(ctx);
+    this.drawHookRing(ctx);
     this.drawMark(ctx);
     this.drawRaftWater(ctx);
     if (this.swiftee) this.swiftee.draw(ctx);
     this.drawPoof(ctx);
+    this.drawRecall(ctx);
     this.fx.drawFront(ctx);
+    this.drawVignette(ctx);
+    this.drawBursts(ctx);
     if (this.titleFade > 0) this.drawTitle(ctx, this.titleFade);
+    this.drawIris(ctx);
+    if (this.ending) this.drawEnding(ctx);
     this.ui.syncHits(state.fish);
+  }
+
+  // --- the big catch at the end, and the end card ------------------------------------------------
+  // A big, dark fish shadow gliding deep under the raft (it's really an old boot).
+  showShadow(x, y) {
+    const shadow = new ShadowFish(this.area, -1);
+    Object.assign(shadow, { x, baseY: y, y, size: 3.4, depth: 0, speed: 0, fade: 1.25 });
+    this.shadow = shadow;
+    return shadow;
+  }
+
+  // The boot hangs from the hook by its pull loop at (x, y) and swings, dripping and dangling
+  // seaweed, with a tin can stuck on its toe.
+  showTrash(x, y) {
+    this.trash = { x, y, angle: 0.6, t: 0, hanging: false, dripIn: 0 };
+    return this.trash;
+  }
+
+  updateTrash(dt) {
+    const b = this.trash;
+    b.t += dt;
+    if (b.hanging) b.swing = Math.sin(b.t * 2.6) * 0.16 * Math.exp(-b.t * 0.35);
+    if (this.popo.line.mode === 'attached') {
+      this.popo.line.hook.x = b.x;
+      this.popo.line.hook.y = b.y;
+    }
+    b.dripIn -= dt;
+    if (b.y < this.waterline && b.dripIn <= 0) {
+      b.dripIn = 0.22 + Math.random() * 0.2;
+      this.fx.drips({ x: b.x + 16 + (Math.random() - 0.5) * 150, y: b.y + 250 });
+    }
+  }
+
+  drawTrash(ctx) {
+    const b = this.trash;
+    if (!b) return;
+    const sway = this.fx.reduced ? 0 : Math.sin(b.t * 3) * 4;
+    ctx.save();
+    // only the part above the water shows: it rises out of the lake and sinks back in
+    ctx.beginPath();
+    ctx.rect(0, 0, STAGE_W, this.waterline + 6);
+    ctx.clip();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(b.angle + (b.swing || 0));
+    ctx.scale(1.6, 1.6); // a huge one
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    const ink = '#3d2210';
+    const shape = (draw, fill, width = 4.5) => {
+      ctx.beginPath();
+      draw();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = width;
+      ctx.stroke();
+    };
+    // the pull loop the hook caught
+    ctx.beginPath();
+    ctx.ellipse(-4, 12, 9, 13, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 6;
+    ctx.stroke();
+    // shaft and foot in one piece, shaded round like the painted scene: lit from the top left
+    const bootPath = () => {
+      ctx.moveTo(-52, 22);
+      ctx.lineTo(40, 22);
+      ctx.quadraticCurveTo(44, 70, 46, 104);
+      ctx.quadraticCurveTo(70, 104, 104, 118);
+      ctx.quadraticCurveTo(132, 132, 128, 158);
+      ctx.lineTo(-58, 158);
+      ctx.quadraticCurveTo(-62, 90, -52, 22);
+    };
+    const leather = ctx.createRadialGradient(-18, 60, 10, 10, 90, 170);
+    leather.addColorStop(0, '#c5844c');
+    leather.addColorStop(0.55, '#8f5229');
+    leather.addColorStop(1, '#5c3015');
+    shape(bootPath, leather);
+    ctx.save();
+    ctx.beginPath();
+    bootPath();
+    ctx.clip();
+    // a soft shade down the back and under the foot, a wet sheen down the front of the shaft
+    const shade = ctx.createLinearGradient(-60, 0, 130, 0);
+    shade.addColorStop(0, 'rgba(40, 18, 5, 0.35)');
+    shade.addColorStop(0.25, 'rgba(40, 18, 5, 0)');
+    ctx.fillStyle = shade;
+    ctx.fillRect(-70, 0, 210, 170);
+    const under = ctx.createLinearGradient(0, 120, 0, 160);
+    under.addColorStop(0, 'rgba(40, 18, 5, 0)');
+    under.addColorStop(1, 'rgba(40, 18, 5, 0.4)');
+    ctx.fillStyle = under;
+    ctx.fillRect(-70, 120, 210, 40);
+    ctx.strokeStyle = 'rgba(255, 245, 225, 0.42)';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(-30, 40);
+    ctx.quadraticCurveTo(-36, 90, -30, 140);
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(56, 114);
+    ctx.quadraticCurveTo(90, 116, 112, 130);
+    ctx.stroke();
+    ctx.restore();
+    // the sole, with a shadowed tread
+    const sole = ctx.createLinearGradient(0, 152, 0, 176);
+    sole.addColorStop(0, '#4a372a');
+    sole.addColorStop(1, '#1f1610');
+    shape(() => ctx.roundRect(-64, 152, 196, 24, 10), sole);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    for (let x = -50; x < 125; x += 22) ctx.fillRect(x, 168, 10, 8);
+    // the cuff, the laces, a patch and a hole in the toe
+    const cuff = ctx.createLinearGradient(0, 16, 0, 36);
+    cuff.addColorStop(0, '#d39258');
+    cuff.addColorStop(1, '#9c5d2f');
+    shape(() => ctx.roundRect(-58, 16, 104, 20, 8), cuff, 4);
+    ctx.strokeStyle = '#f2e6c8';
+    ctx.lineWidth = 3;
+    for (let y = 48; y < 100; y += 14) {
+      ctx.beginPath();
+      ctx.moveTo(14, y);
+      ctx.lineTo(38, y + 9);
+      ctx.moveTo(38, y);
+      ctx.lineTo(14, y + 9);
+      ctx.stroke();
+    }
+    shape(() => ctx.rect(-40, 70, 30, 28), '#5f7a3a', 3);
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = '#d9c9a0';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(-36, 74, 22, 20);
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#1b130d';
+    ctx.beginPath();
+    ctx.ellipse(102, 140, 9, 6, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    // a dented tin can stuck on the toe, with a glint
+    ctx.save();
+    ctx.translate(122, 118);
+    ctx.rotate(0.5);
+    const tin = ctx.createLinearGradient(-14, 0, 14, 0);
+    tin.addColorStop(0, '#8e9aa5');
+    tin.addColorStop(0.35, '#e3e9ee');
+    tin.addColorStop(1, '#7d8994');
+    shape(() => ctx.roundRect(-14, -24, 28, 44, 5), tin, 3.5);
+    ctx.fillStyle = '#d6533c';
+    ctx.fillRect(-12, -10, 24, 14);
+    ctx.restore();
+    // drips of water shining on the leather
+    ctx.fillStyle = 'rgba(220, 245, 255, 0.85)';
+    for (const [x, y, r] of [[-20, 60, 3.5], [24, 112, 3], [70, 126, 2.5], [-44, 120, 3]]) {
+      ctx.beginPath();
+      ctx.ellipse(x, y + Math.sin(b.t * 2 + x) * 1.5, r * 0.8, r * 1.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // seaweed ribbons draped over the top and down the sides, swaying
+    for (const [x0, len, k, w] of [[-46, 130, 1, 9], [-20, 76, -1, 7], [30, 100, 1, 8]]) {
+      const s1 = x0 + 18 * k + sway;
+      const s2 = x0 - 16 * k - sway;
+      const end = [x0 + 6 * k + sway, 20 + len];
+      const weed = ctx.createLinearGradient(0, 20, 0, 20 + len);
+      weed.addColorStop(0, '#4fbf5c');
+      weed.addColorStop(1, '#22703a');
+      ctx.beginPath();
+      ctx.moveTo(x0 - w / 2, 18);
+      ctx.bezierCurveTo(s1 - w / 2, 20 + len * 0.35, s2 - w / 2, 20 + len * 0.7, end[0], end[1]);
+      ctx.bezierCurveTo(s2 + w / 2, 20 + len * 0.7, s1 + w / 2, 20 + len * 0.35, x0 + w / 2, 18);
+      ctx.closePath();
+      ctx.fillStyle = weed;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(20, 70, 30, 0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // --- comic flourishes for the big catch: lettering bursts, a shake, a dark vignette, speed lines
+  comicReset() {
+    this.bursts = [];
+    this.vignette = 0;
+    this.vignetteTo = 0;
+    this.speedLines = 0;
+    this.shaking = null;
+    this.ui.el.scene.style.transform = '';
+  }
+
+  // A comic sound word ("YANK!") on a jagged yellow starburst that pops up and fades.
+  burst(text, x, y, size = 1) {
+    this.bursts.push({ text, x, y, size, t: 0, spin: (Math.random() - 0.5) * 0.3 });
+  }
+
+  shake(amount, seconds) {
+    this.shaking = { amount, t: seconds, total: seconds };
+  }
+
+  updateComic(dt) {
+    if (this.bursts.length) this.bursts = this.bursts.filter((b) => (b.t += dt) < 0.95);
+    this.vignette += (this.vignetteTo - this.vignette) * Math.min(1, dt * 3);
+    const s = this.shaking;
+    if (!s) return;
+    const scene = this.ui.el.scene;
+    if ((s.t -= dt) > 0 && !this.fx.reduced) {
+      const k = s.amount * (s.t / s.total) * this.stage.scale;
+      scene.style.transform = `translate(${((Math.random() - 0.5) * 2 * k).toFixed(1)}px, ${((Math.random() - 0.5) * 2 * k).toFixed(1)}px)`;
+    } else {
+      this.shaking = null;
+      scene.style.transform = '';
+    }
+  }
+
+  drawBursts(ctx) {
+    for (const b of this.bursts) {
+      const pop = this.fx.reduced ? 1 : ease.outBack(Math.min(1, b.t / 0.18));
+      ctx.save();
+      ctx.globalAlpha = b.t > 0.7 ? Math.max(0, 1 - (b.t - 0.7) / 0.25) : 1;
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.spin);
+      ctx.scale(pop * b.size, pop * b.size);
+      ctx.font = '700 46px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
+      const R = ctx.measureText(b.text).width / 2 + 38;
+      ctx.beginPath();
+      for (let i = 0; i < 28; i += 1) {
+        const a = (i / 28) * TAU;
+        const rad = i % 2 ? R * 0.74 : R;
+        ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad * 0.6);
+      }
+      ctx.closePath();
+      ctx.fillStyle = '#ffe14d';
+      ctx.fill();
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = '#3b1d00';
+      ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 9;
+      ctx.strokeStyle = '#ffffff';
+      ctx.strokeText(b.text, 0, 3);
+      ctx.fillStyle = '#e8401c';
+      ctx.fillText(b.text, 0, 3);
+      ctx.restore();
+    }
+  }
+
+  // Action lines streaking out from Popo across the sky while he hauls.
+  drawSpeedLines(ctx) {
+    if (this.speedLines < 0.01 || this.fx.reduced) return;
+    const head = this.popo.headTop();
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, STAGE_W, this.waterline);
+    ctx.clip();
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 * this.speedLines})`;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 28; i += 1) {
+      const a = (i / 28) * TAU + Math.random() * 0.08;
+      const r0 = 170 + Math.random() * 70;
+      const r1 = r0 + 180 + Math.random() * 280;
+      ctx.lineWidth = 2 + Math.random() * 3;
+      ctx.beginPath();
+      ctx.moveTo(head.x + Math.cos(a) * r0, head.y + Math.sin(a) * r0);
+      ctx.lineTo(head.x + Math.cos(a) * r1, head.y + Math.sin(a) * r1);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  drawVignette(ctx) {
+    if (this.vignette < 0.01) return;
+    const g = ctx.createRadialGradient(STAGE_W / 2, STAGE_H * 0.42, STAGE_H * 0.3, STAGE_W / 2, STAGE_H * 0.42, STAGE_W * 0.72);
+    g.addColorStop(0, 'rgba(2, 10, 30, 0)');
+    g.addColorStop(1, `rgba(2, 10, 30, ${(0.78 * this.vignette).toFixed(3)})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+  }
+
+  // The cartoon iris: everything but a circle is covered in a warm sunburst, and a cream ring frames
+  // the circle. The circle shows the scene around `focus`, live, wherever the circle itself is, so it
+  // can glide to the middle of the screen with Popo and Swiftee still inside it.
+  drawIris(ctx) {
+    const iris = this.iris;
+    if (!iris) return;
+    const r = Math.max(0, iris.r);
+    const focus = iris.focus || iris;
+    const t = this.fx.t;
+    ctx.save();
+    const glow = ctx.createRadialGradient(iris.x, iris.y, r, iris.x, iris.y, r + STAGE_W);
+    glow.addColorStop(0, '#ffb347');
+    glow.addColorStop(0.18, '#ff6f61');
+    glow.addColorStop(0.45, '#d9437f');
+    glow.addColorStop(1, '#4b2a9b');
+    ctx.fillStyle = glow;
+    ctx.fillRect(-10, -10, STAGE_W + 20, STAGE_H + 20);
+    // sunburst rays turning slowly around the circle
+    ctx.translate(iris.x, iris.y);
+    ctx.rotate(this.fx.reduced ? 0 : t * 0.08);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+    for (let i = 0; i < 16; i += 1) {
+      const a = (i / 16) * TAU;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, STAGE_W * 1.5, a, a + TAU / 32);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+    if (r < 1) return;
+    // inside the circle: the lake, the raft, Popo and Swiftee around the focus point
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(iris.x, iris.y, r, 0, TAU);
+    ctx.clip();
+    ctx.translate(iris.x - focus.x, iris.y - focus.y);
+    const painting = assets.backgrounds[SCENE.background];
+    if (painting) ctx.drawImage(painting, 0, 0, STAGE_W, STAGE_H);
+    this.fx.drawWater(ctx, 0, []);
+    this.popo.drawLine(ctx);
+    this.popo.draw(ctx);
+    this.drawRaftWater(ctx);
+    if (this.swiftee) this.swiftee.draw(ctx);
+    ctx.restore();
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(iris.x, iris.y, r, 0, TAU);
+    ctx.lineWidth = 16;
+    ctx.strokeStyle = '#3b1d00';
+    ctx.stroke();
+    ctx.lineWidth = 9;
+    ctx.strokeStyle = '#fff3d6';
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // The end: "The End" pops up above the iris, which stays open on Popo and Swiftee laughing, with a
+  // few twinkles around the title.
+  showEnding() {
+    this.ending = { t: 0, fade: 1 };
+  }
+
+  drawEnding(ctx) {
+    const { t, fade } = this.ending;
+    const iris = this.iris;
+    const still = this.fx.reduced;
+    const cx = iris ? iris.x : STAGE_W / 2;
+    const cy = iris ? Math.max(120, iris.y - iris.r - 115) : STAGE_H / 2;
+    ctx.save();
+    ctx.globalAlpha = fade;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.font = '700 168px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
+    const text = 'The End';
+    const widths = [...text].map((c) => ctx.measureText(c).width);
+    let x = cx - widths.reduce((a, b) => a + b, 0) / 2;
+    [...text].forEach((c, i) => {
+      const k = Math.max(0, Math.min(1, (t - i * 0.08) / 0.4));
+      const lx = x + widths[i] / 2;
+      x += widths[i];
+      if (k <= 0 || c === ' ') return;
+      const pop = still ? 1 : ease.outBack(k);
+      ctx.save();
+      ctx.translate(lx, cy + (still ? 0 : Math.sin(t * 2.6 + i * 0.8) * 6));
+      ctx.scale(pop, pop);
+      ctx.lineWidth = 18;
+      ctx.strokeStyle = '#3b1d00';
+      ctx.strokeText(c, 0, 0);
+      const fill = ctx.createLinearGradient(0, -64, 0, 64);
+      fill.addColorStop(0, '#fffbe9');
+      fill.addColorStop(1, '#ffc94d');
+      ctx.fillStyle = fill;
+      ctx.fillText(c, 0, 0);
+      ctx.restore();
+    });
+    // twinkles around the title, like the ones on the title banner
+    for (let i = 0; i < 7; i += 1) {
+      const k = Math.max(0, Math.sin(t * 1.7 + i * 1.9)) ** 4;
+      if (k < 0.03 || t < 0.6) continue;
+      const tx = cx + Math.cos(i * 2.4) * (360 + (i % 3) * 40);
+      const ty = cy + Math.sin(i * 2.4) * 70;
+      const r = 6 + k * 12;
+      ctx.globalAlpha = fade * k;
+      ctx.fillStyle = '#ffe9a8';
+      ctx.beginPath();
+      ctx.moveTo(tx, ty - r);
+      ctx.quadraticCurveTo(tx, ty, tx + r, ty);
+      ctx.quadraticCurveTo(tx, ty, tx, ty + r);
+      ctx.quadraticCurveTo(tx, ty, tx - r, ty);
+      ctx.quadraticCurveTo(tx, ty, tx, ty - r);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 }
 
