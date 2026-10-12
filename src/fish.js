@@ -635,14 +635,26 @@ class ShapeFish extends Swimmer {
     return true;
   }
 
-  // Lights up the fish's markings for a moment: a soft glow pulsing behind each angle and its number.
-  showMarks() {
-    this.shine = { t: 0 };
+  // Lights up the fish's marked angles (gold fans over its corners) until hideMarks(); `swell`
+  // grows the whole fish meanwhile (marks and numbers too), so the one being pointed out stands out.
+  showMarks(swell = 1) {
+    if (!this.shine || this.shine.until !== Infinity) this.shine = { t: 0, until: Infinity };
+    this.swellTo = swell;
+  }
+
+  hideMarks() {
+    if (this.shine) this.shine.until = Math.min(this.shine.until, this.shine.t + 0.4);
+    this.swellTo = 1;
   }
 
   update(dt, area, others) {
     if (this.reveal) this.reveal.t += dt;
-    if (this.shine && (this.shine.t += dt) > 2.4) this.shine = null;
+    if (this.shine && (this.shine.t += dt) > this.shine.until) this.shine = null;
+    if (this.swellTo) {
+      this.swell = (this.swell || 1) + (this.swellTo - (this.swell || 1)) * Math.min(1, dt * (this.reduced ? 30 : 5));
+      this.setZoom(ShapeFish.zoom * this.swell);
+      if (this.swellTo === 1 && Math.abs(this.swell - 1) < 0.002) this.swellTo = 0;
+    }
     this.wag += dt * (2.4 + (this.frozen ? 0 : this.speed / 24) + (this.surprised > 0 ? 6 : 0));
     if (this.surprised > 0) this.surprised -= dt;
     // a blink every few seconds, quick enough not to hide the eye for long
@@ -934,13 +946,13 @@ class ShapeFish extends Swimmer {
   // with it. Each line gets a thin white halo so it reads on every body colour.
   drawMarks(ctx, marks) {
     const strokes = [];
-    const { chevron: L, spread: W, gap: G, tick: T, square: S } = MARK;
+    const { chevron: L, spread: W, tick: T, square: S } = MARK;
+    // one arrowhead on each parallel side, both pointing the same way: the one pair of parallel
+    // sides (a double arrowhead would mean a second pair)
     for (const { at, dir } of marks.arrows) {
       const n = [-dir[1], dir[0]];
-      for (const k of [-G / 2, G / 2]) {
-        const tip = [at[0] + dir[0] * (k + L / 2), at[1] + dir[1] * (k + L / 2)];
-        strokes.push([[tip[0] - dir[0] * L + n[0] * W, tip[1] - dir[1] * L + n[1] * W], tip, [tip[0] - dir[0] * L - n[0] * W, tip[1] - dir[1] * L - n[1] * W]]);
-      }
+      const tip = [at[0] + dir[0] * (L / 2), at[1] + dir[1] * (L / 2)];
+      strokes.push([[tip[0] - dir[0] * L + n[0] * W, tip[1] - dir[1] * L + n[1] * W], tip, [tip[0] - dir[0] * L - n[0] * W, tip[1] - dir[1] * L - n[1] * W]]);
     }
     for (const { at, dir, count } of marks.ticks) {
       const n = [-dir[1], dir[0]];
@@ -961,17 +973,28 @@ class ShapeFish extends Swimmer {
     }
     const edge = shade(this.colour.body, 0.45);
     if (this.shine) {
-      // a pulsing glow behind each marked angle while it's being pointed out
-      const k = Math.min(1, this.shine.t / 0.25) * Math.min(1, (2.4 - this.shine.t) / 0.4);
-      const pulse = 0.55 + 0.45 * Math.sin(this.shine.t * 9);
-      for (const { at, radius } of marks.arcs) {
-        const g = ctx.createRadialGradient(at[0], at[1], 2, at[0], at[1], radius * 2.4);
-        g.addColorStop(0, `rgba(255, 246, 200, ${(0.95 * k * pulse).toFixed(3)})`);
-        g.addColorStop(1, 'rgba(255, 246, 200, 0)');
-        ctx.fillStyle = g;
+      // while the angles are pointed out, each one fills with gold, sweeping open round its
+      // corner, swells once and fades back to the plain mark
+      const t = this.shine.t;
+      const fade = Math.max(0, Math.min(1, (this.shine.until - t) / 0.4));
+      const open = this.reduced ? 1 : Math.min(1, t / 0.35);
+      const swell = this.reduced ? 0 : Math.sin(Math.max(0, Math.min(1, (t - 0.35) / 0.5)) * Math.PI);
+      for (const { at, a, b, radius } of marks.arcs) {
+        const from = Math.atan2(a[1], a[0]);
+        let sweep = Math.atan2(b[1], b[0]) - from;
+        sweep = Math.atan2(Math.sin(sweep), Math.cos(sweep)) * (1 - (1 - open) ** 3);
+        const reach = radius * (1.75 + 0.12 * swell);
         ctx.beginPath();
-        ctx.arc(at[0], at[1], radius * 2.4, 0, TAU);
+        ctx.moveTo(at[0], at[1]);
+        ctx.arc(at[0], at[1], reach, from, from + sweep, sweep < 0);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(255, 214, 70, ${(0.92 * fade).toFixed(3)})`;
         ctx.fill();
+        ctx.beginPath();
+        ctx.arc(at[0], at[1], reach, from, from + sweep, sweep < 0);
+        ctx.lineWidth = 3.4;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${(0.95 * fade).toFixed(3)})`;
+        ctx.stroke();
       }
     }
     for (const arc of marks.arcs) drawAngleArc(ctx, arc, edge);
@@ -1139,6 +1162,25 @@ class ShadowFish {
     ctx.translate(this.x, this.y + Math.sin(this.phase * 2.3) * 1.5);
     ctx.scale(this.dir * this.size, this.size);
     ctx.drawImage(sheet, frame * SHADOW.w, 0, SHADOW.w, SHADOW.h, -SHADOW.w / 2, -SHADOW.h / 2, SHADOW.w, SHADOW.h);
+    if (this.eyes > 0) {
+      // the giant's two pale eyes glinting in the dark, blinking now and then, looking ahead
+      const blink = (this.phase * 0.9) % 3 < 0.14 ? 0.12 : 1;
+      ctx.globalAlpha = Math.min(1, this.fade) * this.eyes;
+      for (const ex of [24, 35]) {
+        ctx.save();
+        ctx.translate(ex, -6);
+        ctx.scale(1, blink);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 4.4, 3.6, 0, 0, TAU);
+        ctx.fillStyle = '#fffbe6';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(1.5, 0.5, 2, 0, TAU);
+        ctx.fillStyle = '#10213f';
+        ctx.fill();
+        ctx.restore();
+      }
+    }
     ctx.restore();
   }
 }

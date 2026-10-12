@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, refreshShadows, ShapeFish, ShadowFish, PALETTE, drawLabel, PLACES, FISH, LEVELS, RECALL, STORY, geometry, Popo, correctCatch, wrongCatch, finishLevel, closeCurtain, opening, mouthOf, Cancelled, STAGE_W, STAGE_H, swimArea, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
+const { assets, preloadBackground, clock, ease, drawShell, drawPearlLight, pearlPoint, Effects, WaterScene, surfaceWave, PAN_OVERLAP, refreshShadows, ShapeFish, ShadowFish, PALETTE, PLACES, FISH, LEVELS, RECALL, STORY, geometry, Popo, correctCatch, wrongCatch, finishLevel, closeCurtain, opening, mouthOf, Cancelled, STAGE_W, STAGE_H, swimArea, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
 
 const HINT_DELAY = 4;
 const TAU = Math.PI * 2;
@@ -10,9 +10,22 @@ const between = (a, b) => a + Math.random() * (b - a);
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 const shuffle = (list) => list.map((x) => [Math.random(), x]).sort((a, b) => a[0] - b[0]).map((p) => p[1]);
 
-// The angle recall card (before level 5): where it sits in the water, where its trapezium and
-// its straight line go on it, and the colours of the two angle pieces.
-const RECALL_CARD = { x: 1050, y: 598, w: 560, h: 400, diagram: -92, line: 78, pieces: ['#ffb347', '#ff7aa8'] };
+// The angle recall (before level 5): the lesson card in the open water (its size, where its name,
+// its shape, its straight line and its sum go, the shape's scale and the wedges' radius), the shell
+// on the sand below it, the two flying wedges' colours, and when each angle step starts after
+// "leg" (seconds): the leg, each corner's other side, wedge, number and pulse, the leg again.
+const RECALL_CARD = { x: 836, y: 533, w: 900, h: 500, scale: 44, title: -192, shape: [-170, -4], line: [250, 74], sum: 190, sector: 52 };
+const PEARL = { x: 836, y: 929, size: 1.12 };
+const RECALL_PIECES = ['#ffb347', '#ff8f3a'];
+// The bubble the card arrives and leaves in: its size, how big it swells on the pearl before it
+// lets go, when it lets go and when it pops on the way in (as shares of the arrival), and how
+// high it floats on the way out.
+const BUBBLE = { radius: 290, seed: 62, blow: 0.3, pop: 0.78, surface: 440 };
+// The old boot at the end: its size, and where it hangs below the rod tip.
+const BOOT = { scale: 1.05, hang: [14, 34] };
+const RECALL_FONT = '700 34px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
+const RECALL_TITLE = '700 42px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
+const ANGLE_STEPS = { leg: 0.25, side: [0.85, 2.55], sector: [1.35, 3.05], label: [1.8, 3.5], pulse: [2.1, 3.8], again: 2.2, done: 4.15 };
 
 // The title banner: its water surface, sand line, the open water the decorative fish swim
 // in, where the hooked fish splashes, and sparkle points along the logo's snowy edges.
@@ -33,6 +46,42 @@ function pieceOf({ a, b }) {
   let sweep = Math.atan2(b[1], b[0]) - start;
   sweep = Math.atan2(Math.sin(sweep), Math.cos(sweep));
   return sweep < 0 ? { start: start + sweep, sweep: -sweep } : { start, sweep };
+}
+
+// A soap-film bubble: a clear body, a rainbow rim and a white glint (k: how solid, 0..1).
+function drawBubble(ctx, x, y, r, t, still, k = 1) {
+  if (r <= 0 || k <= 0) return;
+  ctx.save();
+  ctx.globalAlpha *= k;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, TAU);
+  const body = ctx.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r);
+  body.addColorStop(0, 'rgba(255, 255, 255, 0.04)');
+  body.addColorStop(0.8, 'rgba(200, 235, 255, 0.03)');
+  body.addColorStop(1, 'rgba(210, 240, 255, 0.22)');
+  ctx.fillStyle = body;
+  ctx.fill();
+  ctx.globalCompositeOperation = 'lighter';
+  const turn = still ? 0 : t * 0.8;
+  const rim = ctx.createLinearGradient(x + Math.cos(turn) * r, y + Math.sin(turn) * r, x - Math.cos(turn) * r, y - Math.sin(turn) * r);
+  rim.addColorStop(0, 'rgba(140, 230, 255, 0.75)');
+  rim.addColorStop(0.35, 'rgba(255, 190, 240, 0.7)');
+  rim.addColorStop(0.65, 'rgba(255, 236, 150, 0.7)');
+  rim.addColorStop(1, 'rgba(150, 255, 215, 0.75)');
+  ctx.lineWidth = Math.max(1.5, r * 0.035);
+  ctx.strokeStyle = rim;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.8, Math.PI * 1.08, Math.PI * 1.42);
+  ctx.lineWidth = Math.max(1.5, r * 0.06);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x + r * 0.42, y + r * 0.44, Math.max(1, r * 0.06), 0, TAU);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawPiece(ctx, at, { start, sweep }, radius, colour) {
@@ -723,14 +772,14 @@ class Game {
     d.elapsed = 0;
     d.voiced = true;
     // after the voice ends, the bubble stays long enough for a young reader to finish it
-    d.hold = (seconds - d.times[d.times.length - 1]) * 1000 + Math.max(900, d.words.length * 130);
+    d.hold = (seconds - d.times[d.times.length - 1]) * 1000 + Math.max(1200, d.words.length * 170);
   }
 
   placeSpeech() {
     const bird = this.dialogue && this.dialogue.who === 'swiftee' && this.swiftee;
     if (bird) {
-      const h = bird.head();
-      this.ui.placeSpeech(h.x, h.y);
+      // beside her rather than over her head: clear of her wings, the tail pointing at her beak
+      this.ui.placeSpeech(bird.x + 115, bird.bobY() - 100);
       return;
     }
     const p = this.popo;
@@ -833,18 +882,10 @@ class Game {
     } else if (name === 'wonder') {
       this.mark = { char: '?', t: 0, colour: '#7fd8ff' };
       this.audio.play('hmm');
-    } else if (name === 'recallCard') {
-      this.showRecall();
-    } else if (name === 'recallLeg') {
-      this.recallStep('leg');
-    } else if (name === 'recallSum') {
-      this.recallStep('sum');
-    } else if (name === 'recallParallel') {
-      this.recallStep('parallel');
-    } else if (name === 'recallCheer') {
-      this.recallStep('cheer');
+    } else if (name.startsWith('recall:')) {
+      this.recallStep(name.slice(7));
     } else if (name === 'showAngles') {
-      if (this.spotlight) this.spotlight.showMarks();
+      if (this.spotlight) this.spotlight.showMarks(1.35);
       this.audio.play('boing');
     } else if (name === 'twirl' && this.swiftee) {
       if (!this.fx.reduced) this.swiftee.twirl();
@@ -1068,7 +1109,6 @@ class Game {
       (this.dialogue.next < this.dialogue.words.length || this.dialogue.held < 250);
     if (this.swiftee) {
       this.swiftee.speaking = !!speaking && this.dialogue.who === 'swiftee';
-      this.swiftee.teaching = !!this.recall && this.recall.t > 1;
       this.swiftee.celebrating = this.awaitingNext;
     }
     this.popo.update(dt);
@@ -1182,205 +1222,580 @@ class Game {
     ctx.globalAlpha = 1;
   }
 
-  // --- the angle recall card and the hook reminder ---------------------------------------------
-  // The card fades up and draws its trapezium on Swiftee's first word; each later step starts on
-  // the word that names it (recallStep), so the card follows the voice.
+  // --- the angle recall and the hook reminder ----------------------------------------------------
+  // G5.1, driven by recallAngles (sequences.js): a shell on the sand opens on a glowing pearl, the
+  // lake dims, and the pearl's light lifts the lesson card into the open water. The card then
+  // follows Swiftee's lines, each step starting on the word that names it (recallStep). Everything
+  // on it comes from the lesson's own shape: its name, its parallel sides, and for each of the two
+  // chosen corners the two sides that meet there, the angle between them and its size.
   showRecall() {
-    const marks = geometry.layoutMarks(RECALL.body, 30, ['angles'], { corners: RECALL.corners, font: 30 });
+    const { body, corners, names } = RECALL;
+    const shape = geometry.classify(body);
+    const marks = geometry.layoutMarks(body, RECALL_CARD.scale, ['parallel'], {});
+    const { px, arrows } = marks;
+    const n = px.length;
+    const leg = px.findIndex((p, i) => corners.includes(i) && corners.includes((i + 1) % n));
+    const far = (side, from) => (side === from ? px[(from + 1) % n] : px[side]);
+    const ctx = this.stage.ctx;
+    ctx.save();
+    ctx.font = RECALL_FONT;
+    const angles = corners.map((c) => {
+      const v = px[c];
+      const other = [(c + n - 1) % n, c].find((side) => side !== leg);
+      const [u1, u2] = [far(leg, c), far(other, c)].map((q) => {
+        const d = Math.hypot(q[0] - v[0], q[1] - v[1]);
+        return [(q[0] - v[0]) / d, (q[1] - v[1]) / d];
+      });
+      const degrees = Math.round(Math.acos(Math.max(-1, Math.min(1, u1[0] * u2[0] + u1[1] * u2[1]))) * 180 / Math.PI);
+      const text = `${degrees}°`;
+      const hw = ctx.measureText(text).width / 2 + 4;
+      const hh = 19;
+      // on the bisector, at the first distance where the number fits inside, clear of every side
+      const b = [u1[0] + u2[0], u1[1] + u2[1]];
+      const bl = Math.hypot(b[0], b[1]);
+      let at = null;
+      for (let d = RECALL_CARD.sector + 12; d < 200 && !at; d += 2) {
+        const p = [v[0] + (b[0] / bl) * d, v[1] + (b[1] / bl) * d];
+        const box = [[p[0] - hw, p[1] - hh], [p[0] + hw, p[1] - hh], [p[0] + hw, p[1] + hh], [p[0] - hw, p[1] + hh]];
+        const clear = box.every((q) => geometry.inside(px, q) && px.every((a, i) => geometry.distanceToSegment(q, a, px[(i + 1) % n]) >= 5));
+        const pastArc = box.every((q) => Math.hypot(q[0] - v[0], q[1] - v[1]) >= RECALL_CARD.sector + 6);
+        if (clear && pastArc) at = p;
+      }
+      return { corner: c, name: names[c], v, far: far(other, c), piece: pieceOf({ a: u1, b: u2 }), degrees, text, at, hw, hh };
+    });
+    ctx.restore();
+    // each corner's letter, just outside it on the line that halves its angle
+    const letters = px.map((v, i) => {
+      const [p, q] = [px[(i + n - 1) % n], px[(i + 1) % n]].map((w) => {
+        const d = Math.hypot(w[0] - v[0], w[1] - v[1]);
+        return [(w[0] - v[0]) / d, (w[1] - v[1]) / d];
+      });
+      const out = [-(p[0] + q[0]), -(p[1] + q[1])];
+      const l = Math.hypot(out[0], out[1]);
+      return { text: names[i], at: [v[0] + (out[0] / l) * 30, v[1] + (out[1] / l) * 30] };
+    });
+    const side = (i) => [names[i], names[(i + 1) % n]].sort().join('');
     this.recall = {
-      t: 0, leaving: 0, trace: 0.25, parallel: Infinity, leg: Infinity, angles: [Infinity, Infinity], sum: Infinity, cheer: Infinity,
-      ticked: [], chimed: false, cheered: false, marks,
-      bases: geometry.classify(RECALL.body).bases, // the parallel pair, measured from the shape
+      t: 0, fired: new Set(), motes: [], pops: [], spawning: false, leaving: false, cardOut: 0,
+      shell: { open: 0, rock: 0, squash: 0, leak: 0, pearl: 1, alpha: 0 },
+      dim: 0, glow: 0, emerge: 0, flash: 0, beam: 0,
+      name: shape.kind[0].toUpperCase() + shape.kind.slice(1),
+      px, bases: shape.bases, arrows, leg: [px[corners[0]], px[corners[1]]], angles, letters,
+      parallelText: shape.bases.map(side).sort().join(' ∥ '),
+      sumText: `${angles.map((g) => `∠${g.name}`).join(' + ')} = ${angles.map((g) => g.text).join(' + ')} = ${angles.reduce((sum, g) => sum + g.degrees, 0)}°`,
+      shape: Infinity, parallel: Infinity, angleAt: Infinity, anglesDone: Infinity, sum: Infinity, cheer: Infinity,
     };
+    return this.recall;
   }
 
   recallStep(step) {
     const r = this.recall;
     if (!r) return;
-    if (step === 'parallel') r.parallel = Math.max(r.t, r.trace + 1.3); // once the shape is drawn
-    if (step === 'leg') Object.assign(r, { leg: r.t + 0.05, angles: [r.t + 0.5, r.t + 1.1] });
-    if (step === 'sum') r.sum = r.t + 0.1;
+    if (step === 'shape') r.shape = r.t;
+    if (step === 'parallel') r.parallel = Math.max(r.t, r.shape + 1.3); // once the shape is drawn
+    if (step === 'angles') {
+      r.angleAt = Math.max(r.t, r.parallel + 1);
+      r.anglesDone = r.angleAt + ANGLE_STEPS.done;
+    }
+    if (step === 'sum') r.sum = Math.max(r.t, r.anglesDone);
     if (step === 'cheer') r.cheer = r.t;
   }
 
-  // A soft tick as each number appears; a ta-da as the two pieces land on the line; on "Yay!" a
-  // chime, a hop from Swiftee, a happy cheer from Popo and a few sparkles at the angles.
+  // Each drawing step's sound, once, as it starts; gold motes rising while the card emerges; on
+  // "Yay!" a chime, a hop from Swiftee and sparkles over the straight line.
   updateRecall(dt) {
     const r = this.recall;
     r.t += dt;
-    r.angles.forEach((at, i) => {
-      if (r.t >= at + 0.25 && !r.ticked[i]) { r.ticked[i] = true; this.audio.play('tick'); }
+    const once = (key, time, fn) => {
+      if (r.t >= time && !r.fired.has(key)) {
+        r.fired.add(key);
+        fn();
+      }
+    };
+    const sound = (name) => () => this.audio.play(name);
+    const A = r.angleAt;
+    once('trace', r.shape, sound('trace'));
+    once('name', r.shape + 0.5, sound('bloop'));
+    once('parallel', r.parallel, sound('pluck'));
+    once('arrows', r.parallel + 0.5, sound('tick'));
+    once('leg', A + ANGLE_STEPS.leg, sound('pluck'));
+    r.angles.forEach((_, i) => {
+      once(`side${i}`, A + ANGLE_STEPS.side[i], sound('pluck'));
+      once(`sector${i}`, A + ANGLE_STEPS.sector[i], sound('ascend'));
+      once(`label${i}`, A + ANGLE_STEPS.label[i], sound('tick'));
     });
-    if (r.t >= r.sum + 0.75 && !r.chimed) {
-      r.chimed = true;
-      this.audio.play('tada');
-    }
-    if (r.t >= r.cheer && !r.cheered) {
-      r.cheered = true;
+    once('landed', r.sum + 0.75, sound('tada'));
+    once('cheer', r.cheer, () => {
       this.audio.play('chime');
       if (this.swiftee) this.swiftee.hop();
-      this.popo.act('catch');
-      const { x, y, diagram } = RECALL_CARD;
-      for (const arc of r.marks.arcs) this.fx.sparkle(x + arc.at[0], y + diagram + arc.at[1], 3);
+      const { x, y, line } = RECALL_CARD;
+      this.fx.sparkle(x + line[0], y + line[1] - 40, 8);
+    });
+    if (r.spawning && Math.random() < dt * 9) {
+      const [px, py] = pearlPoint(PEARL.x, PEARL.y, PEARL.size);
+      this.fx.puff(px + (Math.random() - 0.5) * 30, py - 10, 0, 1, Math.random() < 0.4);
     }
-    if (r.leaving && (r.leaving += dt) > 0.35) this.recall = null;
+    if ((r.spawning || r.beam > 0.2) && !this.fx.reduced && Math.random() < dt * (r.spawning ? 14 : 4)) {
+      const [px, py] = pearlPoint(PEARL.x, PEARL.y, PEARL.size);
+      r.motes.push({ x: px + (Math.random() - 0.5) * 24, y: py - 6, vx: (Math.random() - 0.5) * 30, vy: -70 - Math.random() * 60, life: 0 });
+    }
+    for (const m of r.motes) {
+      m.life += dt;
+      m.x += m.vx * dt;
+      m.y += m.vy * dt;
+    }
+    r.motes = r.motes.filter((m) => m.life < 1.3 && m.y > RECALL_CARD.y + RECALL_CARD.h / 2);
+    if (r.leaving) r.cardOut = Math.min(1, r.cardOut + dt / 1.1);
+    // the bubble pops: arriving in the middle, and leaving near the surface
+    const burst = (x, y, radius) => {
+      this.audio.play('pop');
+      for (let i = 0; i < (this.fx.reduced ? 6 : 22); i += 1) {
+        const a = (i / 22) * TAU + Math.random() * 0.3;
+        const speed = 90 + Math.random() * 160;
+        r.pops.push({ x: x + Math.cos(a) * radius, y: y + Math.sin(a) * radius, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed - 40, r: 4 + Math.random() * 9, life: 0 });
+      }
+      this.fx.sparkle(x, y - radius * 0.5, 10);
+    };
+    if (r.emerge >= BUBBLE.pop) once('pop', 0, () => burst(RECALL_CARD.x, RECALL_CARD.y, BUBBLE.radius));
+    if (r.cardOut >= 0.85) once('popOut', 0, () => burst(RECALL_CARD.x, BUBBLE.surface, BUBBLE.radius * 0.65));
+    for (const p of r.pops) {
+      p.life += dt / 0.9;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= 1 - dt * 2.5;
+      p.vy = p.vy * (1 - dt * 2.5) - 60 * dt; // slowing, then drifting up
+    }
+    r.pops = r.pops.filter((p) => p.life < 1);
+  }
+
+  pearlAt() {
+    return pearlPoint(PEARL.x, PEARL.y, PEARL.size);
   }
 
   hideRecall() {
-    if (this.recall) this.recall.leaving = 0.001;
+    if (this.recall) this.recall.leaving = true;
   }
 
-  // One trapezium on a card. It traces itself and fills in; its two parallel sides glow gold; its
-  // left leg lights up pink and the angle at each end of it opens with its number; then the two
-  // pieces fly out and snap together on a straight line, which is 180°, and the sum bounces in.
-  // Everything is measured from the drawn trapezium.
+  // Under the card: the lake dimmed round the lesson, the shell on the sand, the pearl's light and
+  // its rising motes. Popo and the lake dim; Swiftee and the card, drawn after, stay bright.
+  drawPearlScene(ctx) {
+    const r = this.recall;
+    if (!r) return;
+    if (r.dim > 0) {
+      const { x, y } = RECALL_CARD;
+      const dim = ctx.createRadialGradient(x, y, 300, x, y, 1100);
+      dim.addColorStop(0, `rgba(4, 14, 40, ${0.46 * r.dim})`);
+      dim.addColorStop(1, `rgba(4, 14, 40, ${0.62 * r.dim})`);
+      ctx.fillStyle = dim;
+      ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+    }
+    if (r.shell.alpha <= 0) return;
+    drawShell(ctx, PEARL.x, PEARL.y, PEARL.size, r.shell);
+    drawPearlLight(ctx, PEARL.x, PEARL.y, PEARL.size, r.glow * r.shell.alpha * Math.min(1, r.shell.open * 2), r.t, this.fx.reduced);
+    if (r.motes.length) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const m of r.motes) {
+        const a = Math.sin(Math.min(1, m.life / 1.3) * Math.PI);
+        ctx.fillStyle = `rgba(255, 214, 120, ${0.85 * a})`;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, 2.6, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  // The pearl blows the card in a bubble: a shimmering bubble swells out of the pearl's light and
+  // rises to the middle of the screen with the card small inside it, then pops in a spray of tiny
+  // bubbles and twinkles and the card springs out to full size. Leaving, the card shrinks back
+  // into a bubble that floats up towards the surface and pops. A faint cone of the pearl's light
+  // stays on the card while the lesson runs. On the card the lesson goes step by step: the
+  // trapezium traces itself and fills in under its name, and its corners get their letters; its
+  // parallel sides light up pink with matching arrows ("AB ∥ CD"); for each corner on the chosen
+  // leg the two sides that meet there light up one after the other, the angle between them opens
+  // as an orange wedge, and its size pops in on the bisector; finally copies of the two wedges fly
+  // onto a straight line: ∠D + ∠A = 180°.
   drawRecall(ctx) {
     const r = this.recall;
     if (!r) return;
-    const { x, y, w, h, diagram, line, pieces } = RECALL_CARD;
-    const { px, arcs, labels } = r.marks;
+    const C = RECALL_CARD;
     const at = (start, length = 0.35) => Math.max(0, Math.min(1, (r.t - start) / length));
     const still = this.fx.reduced;
-    // the card: fades in rising 14px into place, with the smallest settle
-    const k0 = at(0, 0.55);
-    const rise = still ? 0 : 14 * (1 - ease.out(k0)) - 2.5 * Math.sin(k0 * Math.PI) * (1 - k0);
+    const [sx, sy] = pearlPoint(PEARL.x, PEARL.y, PEARL.size);
+    if (r.beam > 0) this.drawPearlBeam(ctx, r, sx, sy, C.y + C.h / 2, 1, 1);
+    const b = this.recallBubble(r, sx, sy);
+    if (b.card > 0) {
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.scale(b.card, b.card);
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.roundRect(-C.w / 2, -C.h / 2, C.w, C.h, 30);
+      ctx.fillStyle = 'rgba(0, 20, 60, 0.22)';
+      ctx.save();
+      ctx.translate(0, 9);
+      ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = '#fff8e8';
+      ctx.fill();
+      ctx.lineWidth = 4.5;
+      ctx.strokeStyle = '#3b1d00';
+      ctx.stroke();
+      if (r.flash > 0) {
+        ctx.fillStyle = `rgba(255, 250, 235, ${0.7 * r.flash})`;
+        ctx.fill();
+      }
+      if (r.t >= r.shape) this.drawLesson(ctx, r, at, still);
+      ctx.restore();
+    }
+    if (b.radius > 0) drawBubble(ctx, b.x, b.y, b.radius, r.t, still);
+    if (r.pops.length) {
+      ctx.save();
+      for (const p of r.pops) drawBubble(ctx, p.x, p.y, p.r * (1 - 0.3 * p.life), r.t + p.r, true, 1 - p.life);
+      ctx.restore();
+    }
+  }
+
+  // Where the bubble and the card are: rising from the pearl and popping at the middle (emerge),
+  // then, leaving, closing round the card and floating up to pop near the surface (cardOut).
+  recallBubble(r, sx, sy) {
+    const C = RECALL_CARD;
+    const still = this.fx.reduced;
+    const small = (BUBBLE.radius * 1.55) / C.w; // the card's size inside the bubble
+    if (r.cardOut > 0) {
+      const close = Math.min(1, r.cardOut / 0.3);
+      const float = ease.inOut(Math.max(0, Math.min(1, (r.cardOut - 0.3) / 0.55)));
+      if (r.cardOut >= 0.85) return { x: C.x, y: 0, radius: 0, card: 0 };
+      const y = C.y + (BUBBLE.surface - C.y) * float;
+      const shrink = 1 - 0.35 * float;
+      return { x: C.x + (still ? 0 : Math.sin(float * Math.PI * 2) * 18), y, radius: BUBBLE.radius * ease.out(close) * shrink, card: (1 + (small - 1) * ease.inOut(close)) * shrink };
+    }
+    if (r.emerge <= 0) return { x: sx, y: sy, radius: 0, card: 0 };
+    // first it swells out of the pearl, sitting on it in the open shell, with a little wobble
+    const blow = Math.min(1, r.emerge / BUBBLE.blow);
+    if (blow < 1) {
+      const radius = 6 + (BUBBLE.seed - 6) * (still ? blow : ease.out(blow));
+      const wobble = still ? 0 : Math.sin(blow * Math.PI * 4) * 0.06 * (1 - blow);
+      return { x: sx, y: sy - radius * (1 - wobble), radius, card: small * (radius / BUBBLE.radius) * blow };
+    }
+    // then it lets go and rises, growing, to the middle of the screen
+    const rise = Math.min(1, (r.emerge - BUBBLE.blow) / (BUBBLE.pop - BUBBLE.blow));
+    if (rise < 1) {
+      const k = still ? rise : ease.inOut(rise);
+      const radius = BUBBLE.seed + (BUBBLE.radius - BUBBLE.seed) * (still ? rise : ease.inOut(rise));
+      const startY = sy - BUBBLE.seed;
+      return {
+        x: sx + (C.x - sx) * k + (still ? 0 : Math.sin(rise * Math.PI * 2) * 18 * (1 - k)),
+        y: startY + (C.y - startY) * k,
+        radius,
+        card: small * (radius / BUBBLE.radius),
+      };
+    }
+    const spring = Math.min(1, (r.emerge - BUBBLE.pop) / (1 - BUBBLE.pop));
+    return { x: C.x, y: C.y, radius: 0, card: small + (1 - small) * (still ? 1 : ease.outBack(spring)) };
+  }
+
+  // The pearl's beam: up from the pearl, then open into a cone whose top is the card's bottom edge,
+  // tinted like the inside of a shell, with bands of light rippling up it as through water.
+  drawPearlBeam(ctx, r, sx, sy, bottom, rise, open) {
+    const C = RECALL_CARD;
+    const top = sy + (bottom - sy) * ease.out(rise);
+    const half = 16 + (C.w / 2 - 16) * open;
+    const wave = (k) => (this.fx.reduced ? 0 : Math.sin(r.t * 2.2 + k * 9) * 6 * open);
     ctx.save();
-    ctx.globalAlpha = ease.out(k0) * (r.leaving ? Math.max(0, 1 - r.leaving / 0.35) : 1);
-    ctx.translate(x, y + rise);
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
+    ctx.globalCompositeOperation = 'lighter';
     ctx.beginPath();
-    ctx.roundRect(-w / 2, -h / 2, w, h, 30);
-    ctx.fillStyle = 'rgba(0, 20, 60, 0.22)';
+    ctx.moveTo(sx - 6, sy - 4);
+    for (let i = 1; i <= 10; i += 1) {
+      const k = i / 10;
+      ctx.lineTo(sx - 6 + (C.x - half - sx + 6) * k + wave(k), sy + (top - sy) * k);
+    }
+    for (let i = 10; i >= 1; i -= 1) {
+      const k = i / 10;
+      ctx.lineTo(sx + 6 + (C.x + half - sx - 6) * k - wave(k + 0.5), sy + (top - sy) * k);
+    }
+    ctx.lineTo(sx + 6, sy - 4);
+    ctx.closePath();
+    const cone = ctx.createLinearGradient(0, sy, 0, top);
+    cone.addColorStop(0, `rgba(255, 238, 200, ${0.55 * r.beam})`);
+    cone.addColorStop(0.5, `rgba(255, 210, 235, ${0.22 * r.beam})`);
+    cone.addColorStop(1, `rgba(170, 235, 255, ${0.14 * r.beam})`);
+    ctx.fillStyle = cone;
+    ctx.fill();
     ctx.save();
-    ctx.translate(0, 9);
+    ctx.clip();
+    // ripples of light drifting up the cone
+    if (!this.fx.reduced) {
+      for (let i = 0; i < 5; i += 1) {
+        const k = ((r.t * 0.35 + i / 5) % 1);
+        const y = sy + (top - sy) * k;
+        const band = ctx.createLinearGradient(0, y - 10, 0, y + 10);
+        band.addColorStop(0, 'rgba(255, 255, 255, 0)');
+        band.addColorStop(0.5, `rgba(255, 255, 245, ${0.16 * r.beam * Math.sin(k * Math.PI)})`);
+        band.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = band;
+        ctx.beginPath();
+        for (let j = 0; j <= 12; j += 1) {
+          const x = C.x - C.w / 2 + (j / 12) * C.w;
+          const yy = y + Math.sin(j * 1.3 + r.t * 3) * 5;
+          if (j) ctx.lineTo(x, yy);
+          else ctx.moveTo(x, yy - 10);
+        }
+        ctx.lineTo(C.x + C.w / 2, y + 12);
+        ctx.lineTo(C.x - C.w / 2, y + 12);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+    const core = ctx.createLinearGradient(0, sy, 0, top);
+    core.addColorStop(0, `rgba(255, 252, 235, ${0.7 * r.beam})`);
+    core.addColorStop(1, 'rgba(255, 252, 235, 0)');
+    ctx.beginPath();
+    ctx.moveTo(sx - 4, sy - 4);
+    ctx.lineTo(C.x - half * 0.2, top);
+    ctx.lineTo(C.x + half * 0.2, top);
+    ctx.lineTo(sx + 4, sy - 4);
+    ctx.closePath();
+    ctx.fillStyle = core;
     ctx.fill();
     ctx.restore();
-    ctx.fillStyle = '#fff8e8';
-    ctx.fill();
-    ctx.lineWidth = 4.5;
-    ctx.strokeStyle = '#3b1d00';
-    ctx.stroke();
-    ctx.save();
-    ctx.translate(0, diagram);
-    const side = (i, from = 0, to = 1) => {
-      const [p, q] = [px[i], px[(i + 1) % px.length]];
+  }
+
+  drawLesson(ctx, r, at, still) {
+    const C = RECALL_CARD;
+    const A = r.angleAt;
+    const S = ANGLE_STEPS;
+    const n = r.px.length;
+    const line = (p, q, from = 0, to = 1) => {
       ctx.moveTo(p[0] + (q[0] - p[0]) * from, p[1] + (q[1] - p[1]) * from);
       ctx.lineTo(p[0] + (q[0] - p[0]) * to, p[1] + (q[1] - p[1]) * to);
     };
-    // the shape: its fill fades in once the outline has been traced round its real edges
-    const fill = at(r.trace + 0.85, 0.35);
+    const stroke = (width, colour, alpha = 1) => {
+      if (alpha <= 0) return;
+      ctx.globalAlpha *= alpha;
+      ctx.lineWidth = width;
+      ctx.strokeStyle = colour;
+      ctx.stroke();
+      ctx.globalAlpha /= alpha;
+    };
+    // the name
+    const named = at(r.shape + 0.5, 0.3);
+    if (named > 0) {
+      ctx.save();
+      ctx.translate(0, C.title);
+      const pop = still ? 1 : 0.8 + 0.2 * ease.outBack(named);
+      ctx.scale(pop, pop);
+      ctx.globalAlpha *= named;
+      ctx.font = RECALL_TITLE;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#14284b';
+      ctx.fillText(r.name, 0, 0);
+      ctx.restore();
+    }
+    // the shape slides aside to make room for the straight line when the sum begins
+    const aside = still ? (r.t >= r.sum ? 1 : 0) : ease.inOut(at(r.sum, 0.5));
+    ctx.save();
+    ctx.translate(C.shape[0] * aside, C.shape[1]);
+    const { px } = r;
+    const fill = at(r.shape + 0.85, 0.35);
     if (fill > 0) {
       ctx.beginPath();
-      px.forEach(([px0, py0], i) => (i ? ctx.lineTo(px0, py0) : ctx.moveTo(px0, py0)));
+      px.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
       ctx.closePath();
       ctx.globalAlpha *= fill;
       ctx.fillStyle = '#d6edff';
       ctx.fill();
       ctx.globalAlpha /= fill;
     }
-    const lengths = px.map((p, i) => Math.hypot(px[(i + 1) % px.length][0] - p[0], px[(i + 1) % px.length][1] - p[1]));
-    let left = (still ? 1 : ease.inOut(at(r.trace, 0.9))) * lengths.reduce((a, b) => a + b, 0);
+    // the angle wedges, under the sides: orange, then a firmer arc, pulsing once when complete
+    r.angles.forEach((g, i) => {
+      const open = at(A + S.sector[i], 0.45);
+      if (open <= 0) return;
+      const pulse = Math.sin(at(A + S.pulse[i], 0.35) * Math.PI);
+      const sweep = g.piece.sweep * (still ? 1 : ease.out(open));
+      const radius = C.sector + pulse * 3;
+      ctx.beginPath();
+      ctx.moveTo(g.v[0], g.v[1]);
+      ctx.arc(g.v[0], g.v[1], radius, g.piece.start, g.piece.start + sweep);
+      ctx.closePath();
+      ctx.fillStyle = `rgba(255, 138, 28, ${0.55 + 0.2 * pulse})`;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(g.v[0], g.v[1], radius, g.piece.start, g.piece.start + sweep);
+      stroke(3.5 + 2 * pulse, '#c4501a');
+    });
+    // the outline, traced round its real edges
+    const lengths = px.map((p, i) => Math.hypot(px[(i + 1) % n][0] - p[0], px[(i + 1) % n][1] - p[1]));
+    let left = (still ? 1 : ease.inOut(at(r.shape, 0.9))) * lengths.reduce((a, b) => a + b, 0);
     ctx.beginPath();
     lengths.forEach((len, i) => {
       if (left <= 0) return;
-      side(i, 0, Math.min(1, left / len));
+      line(px[i], px[(i + 1) % n], 0, Math.min(1, left / len));
       left -= len;
     });
-    const emphasis = Math.sin(at(r.trace + 1.0, 0.45) * Math.PI);
-    ctx.lineWidth = 4 + emphasis * 2;
-    ctx.strokeStyle = '#14284b';
-    ctx.stroke();
-    // the parallel pair: gold travels along both sides together, holds, then fades back
-    const gold = at(r.parallel, 0.6) * (1 - at(r.parallel + 2.4, 0.4));
-    if (gold > 0) {
+    stroke(4 + Math.sin(at(r.shape + 1, 0.45) * Math.PI) * 2, '#14284b');
+    // the parallel pair: pink along both at once, held until the angles begin
+    const pink = at(r.parallel, 0.6) * (1 - at(A, 0.3));
+    if (pink > 0) {
       const run = still ? 1 : ease.inOut(at(r.parallel, 0.6));
-      const alpha = Math.min(1, gold * 1.5);
-      for (const [width, colour] of [[11, 'rgba(255, 255, 255, 0.9)'], [7, '#ffc21e']]) {
+      ctx.beginPath();
+      for (const i of r.bases) line(px[i], px[(i + 1) % n], 0, run);
+      stroke(8, '#ff3d8b', pink);
+    }
+    // matching arrows on the parallel sides (they stay)
+    const arrows = at(r.parallel + 0.5, 0.25);
+    if (arrows > 0) {
+      const pop = still ? 1 : 0.6 + 0.4 * ease.outBack(arrows);
+      for (const { at: [x, y], dir: [dx, dy] } of r.arrows) {
+        const [ax, ay] = [dx * 9 * pop, dy * 9 * pop];
+        const [nx, ny] = [-dy * 8 * pop, dx * 8 * pop];
         ctx.beginPath();
-        for (const i of r.bases) side(i, 0, run);
-        ctx.lineWidth = width;
-        ctx.strokeStyle = colour;
-        ctx.globalAlpha *= alpha;
-        ctx.stroke();
-        ctx.globalAlpha /= alpha;
+        ctx.moveTo(x - ax + nx, y - ay + ny);
+        ctx.lineTo(x + ax, y + ay);
+        ctx.lineTo(x - ax - nx, y - ay - ny);
+        stroke(3.5, '#14284b', arrows);
       }
     }
-    // the leg, from D up to A
-    const k = at(r.leg, 0.4);
-    if (k > 0) {
-      const [d, a] = [px[0], px[3]];
+    // the leg, from the first corner to the second, then each corner's other side from the corner
+    const legOn = at(A + S.leg, 0.45);
+    if (legOn > 0) {
       ctx.beginPath();
-      ctx.moveTo(d[0], d[1]);
-      ctx.lineTo(d[0] + (a[0] - d[0]) * k, d[1] + (a[1] - d[1]) * k);
-      ctx.lineWidth = 9;
-      ctx.strokeStyle = '#ff5d8f';
-      ctx.stroke();
+      line(r.leg[0], r.leg[1], 0, still ? 1 : ease.inOut(legOn));
+      stroke(8 + 3 * Math.sin(at(A + S.again, 0.35) * Math.PI), '#ff3d8b');
     }
-    // each angle opens round its corner, then its number pops a little and settles
-    arcs.forEach((arc, i) => {
-      const open = at(r.angles[i], 0.35);
-      if (open <= 0) return;
-      const piece = pieceOf(arc);
-      drawPiece(ctx, arc.at, { start: piece.start, sweep: piece.sweep * (still ? 1 : ease.out(open)) }, 36, pieces[i]);
-      const pop = at(r.angles[i] + 0.25, 0.3);
-      if (pop <= 0) return;
-      const size = 30 * (still ? 1 : 1 + 0.25 * Math.sin(pop * Math.PI));
+    r.angles.forEach((g, i) => {
+      const on = at(A + S.side[i], 0.4);
+      if (on <= 0) return;
+      ctx.beginPath();
+      line(g.v, g.far, 0, still ? 1 : ease.inOut(on));
+      stroke(8, '#ff3d8b');
+    });
+    // the corners' letters, once the shape is drawn
+    const lettered = at(r.shape + 0.9, 0.4);
+    if (lettered > 0) {
+      ctx.save();
+      ctx.globalAlpha *= lettered;
+      ctx.font = RECALL_FONT;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#14284b';
+      for (const { text, at: [x, y] } of r.letters) ctx.fillText(text, x, y + 1);
+      ctx.restore();
+    }
+    // each angle's size, on its bisector
+    r.angles.forEach((g, i) => {
+      const pop = at(A + S.label[i], 0.3);
+      if (pop <= 0 || !g.at) return;
+      ctx.save();
+      ctx.translate(g.at[0], g.at[1]);
+      const grow = still ? 1 : 1 + 0.25 * Math.sin(pop * Math.PI);
+      ctx.scale(grow, grow);
       ctx.globalAlpha *= pop;
-      drawLabel(ctx, labels[i].text, labels[i].at[0], labels[i].at[1], size);
-      ctx.globalAlpha /= pop;
+      ctx.font = RECALL_FONT;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#fff8e8';
+      ctx.strokeText(g.text, 0, 1);
+      ctx.fillStyle = '#14284b';
+      ctx.fillText(g.text, 0, 1);
+      ctx.restore();
     });
     ctx.restore();
-    // the two pieces fly down and snap together on the line: a straight angle
-    const fly = at(r.sum, 0.75);
+    // copies of the two wedges fly out and snap together on a straight line: 180°
+    const fly = at(r.sum + 0.2, 0.75);
     if (fly > 0) {
-      const e = still ? 1 : ease.outBack(fly);
+      const ke = still ? 1 : ease.outBack(fly);
+      const [lx, ly] = C.line;
       let start = Math.PI;
-      arcs.forEach((arc, i) => {
-        const from = pieceOf(arc);
-        const sweep = from.sweep;
-        const to = { start: start, sweep };
-        start += sweep;
-        let turn = to.start - from.start;
+      r.angles.forEach((g, i) => {
+        const from = g.piece;
+        let turn = start - from.start;
         turn = Math.atan2(Math.sin(turn), Math.cos(turn));
-        const cx = arc.at[0] * (1 - e);
-        const cy = (arc.at[1] + diagram) * (1 - e) + line * e - Math.sin(fly * Math.PI) * 30;
-        drawPiece(ctx, [cx, cy], { start: from.start + turn * e, sweep }, 36 + 22 * e, pieces[i]);
+        const ox = C.shape[0] * aside + g.v[0];
+        const oy = C.shape[1] + g.v[1];
+        const cx = ox + (lx - ox) * ke;
+        const cy = oy + (ly - oy) * ke - Math.sin(fly * Math.PI) * 30;
+        drawPiece(ctx, [cx, cy], { start: from.start + turn * ke, sweep: from.sweep }, C.sector + 16 * ke, RECALL_PIECES[i]);
+        start += from.sweep;
       });
-      const landed = at(r.sum + 0.7, 0.25);
+      const landed = at(r.sum + 0.9, 0.25);
       if (landed > 0) {
         ctx.globalAlpha *= landed;
         ctx.beginPath();
-        ctx.moveTo(-96, line);
-        ctx.lineTo(96, line);
+        ctx.moveTo(lx - 125, ly);
+        ctx.lineTo(lx + 125, ly);
         ctx.lineWidth = 5;
         ctx.strokeStyle = '#14284b';
         ctx.stroke();
-        drawLabel(ctx, `${arcs[0].degrees + arcs[1].degrees}°`, 0, line - 76, 30);
+        const total = r.angles.reduce((sum, g) => sum + g.degrees, 0);
+        ctx.font = RECALL_FONT;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#14284b';
+        ctx.fillText(`${total}°`, lx, ly - C.sector - 40);
         ctx.globalAlpha /= landed;
       }
     }
-    const shown = at(r.sum + 0.85, 0.4);
-    if (shown > 0) {
-      const text = `${arcs[0].degrees}° + ${arcs[1].degrees}° = ${arcs[0].degrees + arcs[1].degrees}°`;
-      ctx.translate(0, h / 2 - 50);
-      const grow = still ? 1 : 0.8 + 0.2 * ease.outBack(shown);
-      ctx.scale(grow, grow);
-      ctx.globalAlpha *= shown;
-      ctx.font = '700 34px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
-      const tw = ctx.measureText(text).width + 44;
+    // the statement under it all: "AB ∥ CD" while the parallel sides are shown, then the sum
+    const said = at(r.parallel + 0.6, 0.3) * (1 - at(A, 0.3));
+    if (said > 0) this.drawStatement(ctx, r.parallelText, C.sum, said, false, still);
+    const shown = at(r.sum + 1, 0.4);
+    if (shown > 0) this.drawStatement(ctx, r.sumText, C.sum, shown, true, still, Math.sin(at(r.cheer, 0.45) * Math.PI));
+  }
+
+  // A line of mathematics in a pill: plain for a fact, gold for the answer.
+  drawStatement(ctx, text, y, k, gold, still, swell = 0) {
+    ctx.save();
+    ctx.translate(0, y);
+    const grow = (still ? 1 : 0.8 + 0.2 * ease.outBack(k)) * (1 + 0.08 * swell);
+    ctx.scale(grow, grow);
+    ctx.globalAlpha *= k;
+    ctx.font = '700 36px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
+    const ink = gold ? '#3b1d00' : '#14284b';
+    // the font has no ∥ or ∠, so those two are drawn as shapes, sized to the letters
+    const SYMBOL = { '∥': 22, '∠': 26 };
+    const parts = text.split(/([∥∠])/).filter(Boolean);
+    const widths = parts.map((part) => SYMBOL[part] || ctx.measureText(part).width);
+    const tw = widths.reduce((a, b) => a + b, 0) + 48;
+    ctx.beginPath();
+    ctx.roundRect(-tw / 2, -30, tw, 60, 30);
+    ctx.fillStyle = gold ? '#ffe066' : '#ffffff';
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = ink;
+    ctx.stroke();
+    ctx.fillStyle = ink;
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = 3.6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    let x = -tw / 2 + 24;
+    parts.forEach((part, i) => {
+      const w = widths[i];
       ctx.beginPath();
-      ctx.roundRect(-tw / 2, -27, tw, 54, 27);
-      ctx.fillStyle = '#ffe066';
-      ctx.fill();
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#3b1d00';
-      ctx.stroke();
-      ctx.fillStyle = '#3b1d00';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(text, 0, 2);
-    }
+      if (part === '∥') {
+        for (const dx of [w * 0.32, w * 0.68]) {
+          ctx.moveTo(x + dx, -14);
+          ctx.lineTo(x + dx, 15);
+        }
+        ctx.stroke();
+      } else if (part === '∠') {
+        ctx.moveTo(x + w * 0.85, -12);
+        ctx.lineTo(x + w * 0.12, 13);
+        ctx.lineTo(x + w * 0.92, 13);
+        ctx.stroke();
+      } else {
+        ctx.fillText(part, x, 2);
+      }
+      x += w;
+    });
     ctx.restore();
   }
 
@@ -1525,6 +1940,7 @@ class Game {
       this.popo.drawLine(ctx, 'line');
     } else {
       this.drawTrash(ctx);
+      this.drawGeyser(ctx);
       this.popo.drawLine(ctx);
     }
     this.drawHandRipple(ctx);
@@ -1532,12 +1948,12 @@ class Game {
     this.drawHookRing(ctx);
     this.drawMark(ctx);
     this.drawRaftWater(ctx);
+    this.drawPearlScene(ctx);
     if (this.swiftee) this.swiftee.draw(ctx);
     this.drawPoof(ctx);
     this.drawRecall(ctx);
     this.fx.drawFront(ctx);
     this.drawVignette(ctx);
-    this.drawBursts(ctx);
     if (this.titleFade > 0) this.drawTitle(ctx, this.titleFade);
     this.drawCurtain();
     this.ui.syncHits(state.fish);
@@ -1547,7 +1963,7 @@ class Game {
   // A big, dark fish shadow gliding deep under the raft (it's really an old boot).
   showShadow(x, y) {
     const shadow = new ShadowFish(this.area, -1);
-    Object.assign(shadow, { x, baseY: y, y, size: 3.4, depth: 0, speed: 0, fade: 1.25 });
+    Object.assign(shadow, { x, baseY: y, y, size: 5.2, depth: 0, speed: 0, fade: 1.7, eyes: 0 });
     this.shadow = shadow;
     return shadow;
   }
@@ -1570,7 +1986,7 @@ class Game {
     b.dripIn -= dt;
     if (b.y < this.waterline && b.dripIn <= 0) {
       b.dripIn = 0.22 + Math.random() * 0.2;
-      this.fx.drips({ x: b.x + 16 + (Math.random() - 0.5) * 150, y: b.y + 250 });
+      this.fx.drips({ x: b.x + (16 + (Math.random() - 0.5) * 150) * BOOT.scale / 1.6, y: b.y + 176 * BOOT.scale });
     }
   }
 
@@ -1585,26 +2001,26 @@ class Game {
     ctx.clip();
     ctx.translate(b.x, b.y);
     ctx.rotate(b.angle + (b.swing || 0));
-    ctx.scale(1.6, 1.6); // a huge one
+    ctx.scale(BOOT.scale, BOOT.scale);
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
-    const ink = '#3d2210';
-    const shape = (draw, fill, width = 4.5) => {
+    // painted rather than outlined: a soft dark edge, the light from the top left
+    const edge = 'rgba(48, 24, 8, 0.6)';
+    const shape = (draw, fill, width = 2.2) => {
       ctx.beginPath();
       draw();
       ctx.fillStyle = fill;
       ctx.fill();
-      ctx.strokeStyle = ink;
+      ctx.strokeStyle = edge;
       ctx.lineWidth = width;
       ctx.stroke();
     };
     // the pull loop the hook caught
     ctx.beginPath();
-    ctx.ellipse(-4, 12, 9, 13, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = ink;
-    ctx.lineWidth = 6;
+    ctx.ellipse(-4, 12, 9, 13, 0, 0, TAU);
+    ctx.strokeStyle = '#4a2a14';
+    ctx.lineWidth = 5;
     ctx.stroke();
-    // shaft and foot in one piece, shaded round like the painted scene: lit from the top left
     const bootPath = () => {
       ctx.moveTo(-52, 22);
       ctx.lineTo(40, 22);
@@ -1614,51 +2030,68 @@ class Game {
       ctx.lineTo(-58, 158);
       ctx.quadraticCurveTo(-62, 90, -52, 22);
     };
-    const leather = ctx.createRadialGradient(-18, 60, 10, 10, 90, 170);
-    leather.addColorStop(0, '#c5844c');
-    leather.addColorStop(0.55, '#8f5229');
-    leather.addColorStop(1, '#5c3015');
+    const leather = ctx.createRadialGradient(-22, 52, 8, 6, 92, 175);
+    leather.addColorStop(0, '#c98a50');
+    leather.addColorStop(0.45, '#94572c');
+    leather.addColorStop(1, '#4e2810');
     shape(bootPath, leather);
     ctx.save();
     ctx.beginPath();
     bootPath();
     ctx.clip();
-    // a soft shade down the back and under the foot, a wet sheen down the front of the shaft
+    // shade down the back and under the foot, a cool rim of light from the water on the right
     const shade = ctx.createLinearGradient(-60, 0, 130, 0);
-    shade.addColorStop(0, 'rgba(40, 18, 5, 0.35)');
-    shade.addColorStop(0.25, 'rgba(40, 18, 5, 0)');
+    shade.addColorStop(0, 'rgba(30, 12, 2, 0.45)');
+    shade.addColorStop(0.3, 'rgba(30, 12, 2, 0)');
+    shade.addColorStop(0.85, 'rgba(30, 12, 2, 0)');
+    shade.addColorStop(1, 'rgba(150, 210, 240, 0.35)');
     ctx.fillStyle = shade;
     ctx.fillRect(-70, 0, 210, 170);
-    const under = ctx.createLinearGradient(0, 120, 0, 160);
-    under.addColorStop(0, 'rgba(40, 18, 5, 0)');
-    under.addColorStop(1, 'rgba(40, 18, 5, 0.4)');
+    const under = ctx.createLinearGradient(0, 110, 0, 160);
+    under.addColorStop(0, 'rgba(30, 12, 2, 0)');
+    under.addColorStop(1, 'rgba(30, 12, 2, 0.5)');
     ctx.fillStyle = under;
-    ctx.fillRect(-70, 120, 210, 40);
-    ctx.strokeStyle = 'rgba(255, 245, 225, 0.42)';
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(-30, 40);
-    ctx.quadraticCurveTo(-36, 90, -30, 140);
-    ctx.stroke();
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(56, 114);
-    ctx.quadraticCurveTo(90, 116, 112, 130);
-    ctx.stroke();
+    ctx.fillRect(-70, 110, 210, 50);
+    // creases in the leather at the ankle and across the toe
+    ctx.strokeStyle = 'rgba(40, 18, 4, 0.35)';
+    ctx.lineWidth = 2;
+    for (const [x0, y0, x1, y1, cx, cy] of [[-50, 96, 40, 100, -6, 90], [-46, 108, 44, 112, 0, 104], [60, 112, 92, 150, 84, 120], [76, 118, 108, 150, 100, 126]]) {
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo(cx, cy, x1, y1);
+      ctx.stroke();
+    }
+    // wet shine: long soft streaks down the shaft and along the toe
+    for (const [w, a] of [[9, 0.18], [4, 0.45]]) {
+      ctx.strokeStyle = `rgba(255, 248, 230, ${a})`;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.moveTo(-30, 36);
+      ctx.quadraticCurveTo(-37, 88, -31, 140);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(56, 113);
+      ctx.quadraticCurveTo(88, 114, 112, 128);
+      ctx.stroke();
+    }
     ctx.restore();
     // the sole, with a shadowed tread
     const sole = ctx.createLinearGradient(0, 152, 0, 176);
     sole.addColorStop(0, '#4a372a');
-    sole.addColorStop(1, '#1f1610');
+    sole.addColorStop(1, '#1c140e');
     shape(() => ctx.roundRect(-64, 152, 196, 24, 10), sole);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-    for (let x = -50; x < 125; x += 22) ctx.fillRect(x, 168, 10, 8);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    for (let x = -50; x < 125; x += 22) ctx.fillRect(x, 168, 10, 7);
     // the cuff, the laces, a patch and a hole in the toe
     const cuff = ctx.createLinearGradient(0, 16, 0, 36);
-    cuff.addColorStop(0, '#d39258');
-    cuff.addColorStop(1, '#9c5d2f');
-    shape(() => ctx.roundRect(-58, 16, 104, 20, 8), cuff, 4);
-    ctx.strokeStyle = '#f2e6c8';
+    cuff.addColorStop(0, '#d8995e');
+    cuff.addColorStop(1, '#94562a');
+    shape(() => ctx.roundRect(-58, 16, 104, 20, 8), cuff);
+    ctx.fillStyle = 'rgba(20, 8, 2, 0.55)'; // the dark opening inside the cuff
+    ctx.beginPath();
+    ctx.ellipse(-6, 19, 48, 4, 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = '#efe2c2';
     ctx.lineWidth = 3;
     for (let y = 48; y < 100; y += 14) {
       ctx.beginPath();
@@ -1668,7 +2101,7 @@ class Game {
       ctx.lineTo(14, y + 9);
       ctx.stroke();
     }
-    shape(() => ctx.rect(-40, 70, 30, 28), '#5f7a3a', 3);
+    shape(() => ctx.rect(-40, 70, 30, 28), '#5f7a3a', 1.8);
     ctx.setLineDash([4, 4]);
     ctx.strokeStyle = '#d9c9a0';
     ctx.lineWidth = 1.5;
@@ -1676,25 +2109,46 @@ class Game {
     ctx.setLineDash([]);
     ctx.fillStyle = '#1b130d';
     ctx.beginPath();
-    ctx.ellipse(102, 140, 9, 6, -0.3, 0, Math.PI * 2);
+    ctx.ellipse(102, 140, 9, 6, -0.3, 0, TAU);
     ctx.fill();
+    // water squirting out of the hole in the toe while it hangs
+    if (b.hanging && !this.fx.reduced) {
+      const k = Math.max(0, 1 - b.t / 3.5);
+      if (k > 0) {
+        ctx.save();
+        ctx.setLineDash([7, 6]);
+        ctx.lineDashOffset = -b.t * 90;
+        ctx.strokeStyle = `rgba(200, 238, 255, ${0.85 * k})`;
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(108, 142);
+        ctx.quadraticCurveTo(150, 132, 166, 196);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
     // a dented tin can stuck on the toe, with a glint
     ctx.save();
     ctx.translate(122, 118);
     ctx.rotate(0.5);
     const tin = ctx.createLinearGradient(-14, 0, 14, 0);
     tin.addColorStop(0, '#8e9aa5');
-    tin.addColorStop(0.35, '#e3e9ee');
+    tin.addColorStop(0.35, '#e8eef2');
     tin.addColorStop(1, '#7d8994');
-    shape(() => ctx.roundRect(-14, -24, 28, 44, 5), tin, 3.5);
+    shape(() => ctx.roundRect(-14, -24, 28, 44, 5), tin, 1.8);
     ctx.fillStyle = '#d6533c';
     ctx.fillRect(-12, -10, 24, 14);
     ctx.restore();
-    // drips of water shining on the leather
-    ctx.fillStyle = 'rgba(220, 245, 255, 0.85)';
-    for (const [x, y, r] of [[-20, 60, 3.5], [24, 112, 3], [70, 126, 2.5], [-44, 120, 3]]) {
+    // beads of water on the leather, each with a glint
+    for (const [x, y, r] of [[-20, 60, 3.5], [24, 112, 3], [70, 126, 2.5], [-44, 120, 3], [-8, 136, 2.4], [30, 40, 2.2]]) {
+      const yy = y + Math.sin(b.t * 2 + x) * 1.5;
+      ctx.fillStyle = 'rgba(210, 240, 255, 0.7)';
       ctx.beginPath();
-      ctx.ellipse(x, y + Math.sin(b.t * 2 + x) * 1.5, r * 0.8, r * 1.2, 0, 0, Math.PI * 2);
+      ctx.ellipse(x, yy, r * 0.8, r * 1.2, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.beginPath();
+      ctx.arc(x - r * 0.25, yy - r * 0.4, r * 0.32, 0, TAU);
       ctx.fill();
     }
     // seaweed ribbons draped over the top and down the sides, swaying
@@ -1712,79 +2166,150 @@ class Game {
       ctx.closePath();
       ctx.fillStyle = weed;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(20, 70, 30, 0.6)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(20, 70, 30, 0.5)';
+      ctx.lineWidth = 1.2;
       ctx.stroke();
     }
     ctx.restore();
   }
 
-  // --- comic flourishes for the big catch: lettering bursts, a shake, a dark vignette, speed lines
+
+  // --- the big catch's drama: a camera push-in and shake, a dark vignette, speed lines, an
+  // impact flash and the water column the boot bursts out of
   comicReset() {
-    this.bursts = [];
     this.vignette = 0;
     this.vignetteTo = 0;
     this.speedLines = 0;
     this.shaking = null;
+    this.camera = { zoom: 1, to: 1, x: STAGE_W / 2, y: STAGE_H / 2, on: false };
+    this.flash = 0;
+    this.geyser = null;
+    this.spray = [];
     this.panScene(0, 0);
   }
 
-  // A comic sound word ("YANK!") on a jagged yellow starburst that pops up and fades.
-  burst(text, x, y, size = 1) {
-    this.bursts.push({ text, x, y, size, t: 0, spin: (Math.random() - 0.5) * 0.3 });
+  // A burst of water drops from (x, y): thrown up and out, then falling back.
+  sprayFrom(x, y, count, power = 1) {
+    if (this.fx.reduced) count = Math.min(count, 8);
+    for (let i = 0; i < count; i += 1) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.6;
+      const v = (260 + Math.random() * 420) * power;
+      this.spray.push({ x: x + (Math.random() - 0.5) * 40, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: 2 + Math.random() * 4.5, life: 0 });
+    }
+  }
+
+  // Where the boot hangs: just below the rod tip, as a dangling boot would.
+  bootHang() {
+    const tip = this.popo.rodTip();
+    return { x: tip.x + BOOT.hang[0], y: tip.y + BOOT.hang[1] };
   }
 
   shake(amount, seconds) {
     this.shaking = { amount, t: seconds, total: seconds };
   }
 
-  updateComic(dt) {
-    if (this.bursts.length) this.bursts = this.bursts.filter((b) => (b.t += dt) < 0.95);
-    this.vignette += (this.vignetteTo - this.vignette) * Math.min(1, dt * 3);
-    const s = this.shaking;
-    if (!s) return;
-    const scene = this.ui.el.scene;
-    if ((s.t -= dt) > 0 && !this.fx.reduced) {
-      const k = s.amount * (s.t / s.total) * this.stage.scale;
-      scene.style.transform = `translate(${((Math.random() - 0.5) * 2 * k).toFixed(1)}px, ${((Math.random() - 0.5) * 2 * k).toFixed(1)}px)`;
-    } else {
-      this.shaking = null;
-      scene.style.transform = '';
-    }
+  // Leans the camera in towards (x, y) (zoom 1 lets it ease back out).
+  zoomTo(zoom, x = this.camera.x, y = this.camera.y) {
+    Object.assign(this.camera, { to: this.fx.reduced ? 1 : zoom, x, y });
   }
 
-  drawBursts(ctx) {
-    for (const b of this.bursts) {
-      const pop = this.fx.reduced ? 1 : ease.outBack(Math.min(1, b.t / 0.18));
-      ctx.save();
-      ctx.globalAlpha = b.t > 0.7 ? Math.max(0, 1 - (b.t - 0.7) / 0.25) : 1;
-      ctx.translate(b.x, b.y);
-      ctx.rotate(b.spin);
-      ctx.scale(pop * b.size, pop * b.size);
-      ctx.font = '700 46px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
-      const R = ctx.measureText(b.text).width / 2 + 38;
-      ctx.beginPath();
-      for (let i = 0; i < 28; i += 1) {
-        const a = (i / 28) * TAU;
-        const rad = i % 2 ? R * 0.74 : R;
-        ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad * 0.6);
-      }
-      ctx.closePath();
-      ctx.fillStyle = '#ffe14d';
-      ctx.fill();
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = '#3b1d00';
-      ctx.stroke();
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.lineWidth = 9;
-      ctx.strokeStyle = '#ffffff';
-      ctx.strokeText(b.text, 0, 3);
-      ctx.fillStyle = '#e8401c';
-      ctx.fillText(b.text, 0, 3);
-      ctx.restore();
+  updateComic(dt) {
+    this.vignette += (this.vignetteTo - this.vignette) * Math.min(1, dt * 3);
+    this.flash = Math.max(0, this.flash - dt / 0.3);
+    if (this.geyser && (this.geyser.t += dt) > 1.1) this.geyser = null;
+    for (const d of this.spray) {
+      d.life += dt;
+      d.vy += 900 * dt;
+      d.x += d.vx * dt;
+      d.y += d.vy * dt;
     }
+    if (this.spray.length) this.spray = this.spray.filter((d) => d.y < this.waterline + 10 && d.life < 2);
+    const cam = this.camera;
+    cam.zoom += (cam.to - cam.zoom) * Math.min(1, dt * 2.5);
+    const s = this.shaking;
+    if (s && ((s.t -= dt) <= 0 || this.fx.reduced)) this.shaking = null;
+    const zoomed = Math.abs(cam.zoom - 1) > 0.002;
+    if (!this.shaking && !zoomed) {
+      if (cam.on) {
+        cam.on = false;
+        cam.zoom = 1;
+        this.ui.el.scene.style.transform = '';
+      }
+      return;
+    }
+    cam.on = true;
+    const k = this.stage.scale;
+    const jolt = this.shaking ? this.shaking.amount * (this.shaking.t / this.shaking.total) * k : 0;
+    const scene = this.ui.el.scene.style;
+    scene.transformOrigin = `${(cam.x * k).toFixed(1)}px ${(cam.y * k).toFixed(1)}px`;
+    scene.transform = `translate(${((Math.random() - 0.5) * 2 * jolt).toFixed(1)}px, ${((Math.random() - 0.5) * 2 * jolt).toFixed(1)}px) scale(${cam.zoom.toFixed(4)})`;
+  }
+
+  // The water column the boot bursts out of: up in a blink, then slumping back in a spray. A
+  // see-through body with a brighter core, crowned with round drops.
+  drawGeyser(ctx) {
+    for (const d of this.spray) {
+      ctx.fillStyle = 'rgba(225, 245, 255, 0.85)';
+      ctx.beginPath();
+      ctx.ellipse(d.x, d.y, d.r * 0.8, d.r * 1.25, Math.atan2(d.vy, d.vx) + Math.PI / 2, 0, TAU);
+      ctx.fill();
+    }
+    const g = this.geyser;
+    if (!g) return;
+    const up = Math.min(1, g.t / 0.2);
+    const down = Math.max(0, (g.t - 0.3) / 0.8);
+    const h = 300 * ease.out(up) * (1 - ease.in(down));
+    if (h < 2) return;
+    const wl = this.waterline;
+    const w = 68 + 40 * down;
+    const column = (width, alpha) => {
+      ctx.beginPath();
+      ctx.moveTo(g.x - width * 1.7, wl + 6);
+      ctx.bezierCurveTo(g.x - width * 0.7, wl - 10, g.x - width * 0.55, wl - h * 0.6, g.x - width * 0.35, wl - h);
+      ctx.quadraticCurveTo(g.x, wl - h - width * 0.5, g.x + width * 0.35, wl - h);
+      ctx.bezierCurveTo(g.x + width * 0.55, wl - h * 0.6, g.x + width * 0.7, wl - 10, g.x + width * 1.7, wl + 6);
+      ctx.closePath();
+      const body = ctx.createLinearGradient(0, wl - h, 0, wl);
+      body.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+      body.addColorStop(1, `rgba(180, 230, 255, ${alpha * 0.7})`);
+      ctx.fillStyle = body;
+      ctx.fill();
+    };
+    ctx.save();
+    // foam where it leaves the lake, and a mist round its top
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.7 * (1 - down)})`;
+    ctx.beginPath();
+    ctx.ellipse(g.x, wl + 2, w * 2.2, 9, 0, 0, TAU);
+    ctx.fill();
+    const mist = ctx.createRadialGradient(g.x, wl - h, 4, g.x, wl - h, w * 2.4);
+    mist.addColorStop(0, `rgba(255, 255, 255, ${0.45 * (1 - down)})`);
+    mist.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = mist;
+    ctx.fillRect(g.x - w * 2.4, wl - h - w * 2.4, w * 4.8, w * 4.8);
+    column(w, 0.5);
+    column(w * 0.55, 0.75);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.lineWidth = 2;
+    for (const dx of [-0.3, 0.05, 0.32]) {
+      ctx.beginPath();
+      ctx.moveTo(g.x + dx * w, wl - 6);
+      ctx.quadraticCurveTo(g.x + dx * w * 0.6, wl - h * 0.5, g.x + dx * w * 0.4, wl - h * 0.92);
+      ctx.stroke();
+    }
+    // the crown: round drops thrown up and out, falling away as it slumps
+    for (let i = 0; i < 9; i += 1) {
+      const a = -Math.PI / 2 + (i - 4) * 0.33;
+      const out = 18 + 30 * up + 60 * down;
+      const x = g.x + Math.cos(a) * out;
+      const y = wl - h - 8 + Math.sin(a) * out * 0.6 + 140 * down * down;
+      const r = (7 - Math.abs(i - 4)) * (1 - 0.6 * down);
+      if (r <= 0.5) continue;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, TAU);
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.9 * (1 - down)})`;
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   // Action lines streaking out from Popo across the sky while he hauls.
@@ -1811,6 +2336,10 @@ class Game {
   }
 
   drawVignette(ctx) {
+    if (this.flash > 0) {
+      ctx.fillStyle = `rgba(255, 252, 240, ${(0.45 * this.flash).toFixed(3)})`;
+      ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+    }
     if (this.vignette < 0.01) return;
     const g = ctx.createRadialGradient(STAGE_W / 2, STAGE_H * 0.42, STAGE_H * 0.3, STAGE_W / 2, STAGE_H * 0.42, STAGE_W * 0.72);
     g.addColorStop(0, 'rgba(2, 10, 30, 0)');

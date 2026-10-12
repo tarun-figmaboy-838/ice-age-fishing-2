@@ -7,9 +7,10 @@
 
 const DEG = Math.PI / 180;
 const ANGLE_TOLERANCE = 0.25; // degrees
-// Marking sizes in fish pixels: arrow chevrons (length, half-width, gap), tick half-length,
-// right-angle square side and angle-arc radius. Big enough to spot while a fish swims.
-const MARK = { chevron: 10.5, spread: 8.5, gap: 6, tick: 10, square: 17, arc: 23 };
+// Marking sizes in fish pixels: the parallel arrowhead (length, half-width, and the room kept
+// clear around it), tick half-length, right-angle square side and angle-arc radius. Big enough to
+// spot while a fish swims.
+const MARK = { chevron: 12, spread: 9.5, gap: 6, tick: 10, square: 17, arc: 23 };
 const LENGTH_TOLERANCE = 0.01; // units
 
 const add = (a, b) => [a[0] + b[0], a[1] + b[1]];

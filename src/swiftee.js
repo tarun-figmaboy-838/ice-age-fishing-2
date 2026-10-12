@@ -21,7 +21,6 @@ class Swiftee {
     this.lastBeat = -1;
     this.onDownstroke = null;
     this.speaking = false;
-    this.teaching = false;
     this.celebrating = false;
     this.blinkIn = 2.1;
     this.blink = 0;
@@ -75,7 +74,6 @@ class Swiftee {
   personalityFrame() {
     // Retain the established flight cycle during swoops and loop-de-loops.
     if (!assets.swifteePersonality || Math.abs(this.lean) > .025 || this.spin) return null;
-    if (this.teaching) return this.reduced ? 10 : [9, 10, 11, 10][Math.floor(this.time * 2) % 4];
     if (this.laughing) return this.reduced ? 7 : [7, 3, 7, 2][Math.floor(this.time * 8) % 4];
     if (this.blink > 0) return this.blink > .13 || this.blink < .04 ? 1 : 2;
     if (this.speaking) return [3, 0, 4, 3, 5, 0][Math.floor(this.time * 10) % 6];
@@ -113,8 +111,7 @@ class Swiftee {
       const k = 178 / data.frames[0].height;
       const [sx, sy, sw, sh] = data.frames[personality].box;
       ctx.save();ctx.translate(this.x, this.bobY() + 45);
-      // Point into the lesson card (screen right), then face Popo again when done.
-      ctx.scale((this.teaching ? 1 : this.dir) * k, k);
+      ctx.scale(this.dir * k, k);
       ctx.drawImage(assets.swifteePersonality, sx, sy, sw, sh, -128, -236, 256, 256);
       ctx.restore();
       return;

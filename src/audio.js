@@ -328,6 +328,17 @@ class AudioEngine {
       case 'creak': this.tone({ freq: 520, to: 380, type: 'sawtooth', dur: 0.32, gain: 0.025 }); this.tone({ freq: 545, to: 395, type: 'sawtooth', dur: 0.32, gain: 0.02 }); break;
       // a soft tick as a measurement appears
       case 'tick': this.tone({ freq: 1800, to: 1400, type: 'sine', dur: 0.05, gain: 0.07 }); break;
+      // the recall's shell and pearl, and the lesson card's drawing steps
+      case 'rattle': [0, 0.07, 0.14].forEach((d) => { this.noise({ t: now + d, dur: 0.045, type: 'bandpass', freq: 1700, q: 3, gain: 0.16 }); this.tone({ freq: 480, to: 360, type: 'triangle', t: now + d, dur: 0.05, gain: 0.05 }); }); break;
+      case 'shellOpen': this.tone({ freq: 260, to: 720, type: 'sine', dur: 0.14, gain: 0.12 }); this.noise({ dur: 0.1, type: 'lowpass', freq: 900, gain: 0.1 }); break;
+      case 'shimmer': [1568, 2093, 2637, 3136].forEach((f, i) => this.bell(f, now + i * 0.06, 0.035)); break;
+      case 'rise': this.noise({ dur: 0.9, type: 'bandpass', freq: 300, to: 2200, q: 1.1, gain: 0.13 }); this.tone({ freq: 330, to: 880, type: 'sine', dur: 0.9, gain: 0.04 }); break;
+      case 'land': this.tone({ freq: 230, to: 520, type: 'sine', dur: 0.09, gain: 0.11 }); this.noise({ dur: 0.06, type: 'lowpass', freq: 700, gain: 0.08 }); break;
+      case 'trace': this.noise({ dur: 0.85, type: 'highpass', freq: 3800, gain: 0.02 }); break;
+      case 'pluck': this.tone({ freq: 660, to: 640, type: 'triangle', dur: 0.12, gain: 0.08 }); this.tone({ freq: 1320, type: 'sine', dur: 0.08, gain: 0.025 }); break;
+      case 'ascend': this.tone({ freq: 440, to: 880, type: 'sine', dur: 0.35, gain: 0.06 }); break;
+      case 'pop': this.tone({ freq: 380, to: 1300, type: 'sine', dur: 0.07, gain: 0.14 }); this.noise({ dur: 0.05, type: 'highpass', freq: 2500, gain: 0.08 }); [0.05, 0.11].forEach((d) => this.tone({ freq: 900 + d * 4000, to: 1800, type: 'sine', t: now + d, dur: 0.04, gain: 0.04 })); break;
+      case 'click': this.tone({ freq: 900, to: 520, type: 'triangle', dur: 0.05, gain: 0.09 }); this.noise({ dur: 0.04, type: 'bandpass', freq: 2200, q: 2, gain: 0.08 }); break;
       // a gentle two-note chime
       case 'chime': this.bell(1318.5, now, 0.08); this.bell(1568, now + 0.16, 0.08); break;
       // the cartoon iris closing: a slide whistle down

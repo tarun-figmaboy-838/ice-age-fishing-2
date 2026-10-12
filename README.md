@@ -121,14 +121,23 @@ one meeting another head-on turns away in good time) and only wander to a clear 
 never tells a catch from a distractor. Level 2's distractors are isosceles (right trapeziums have
 unequal legs too, so they would look scalene), and right angles appear only in level 4.
 
-Before level 5 (once): **G5.1** something tugs Popo's line (the hook dips, a "!" pops up, the raft
-wobbles with a soft boing), then Swiftee flies in and a card follows her words: it fades up and
-traces its trapezium round the real edges, then fills in; "Look! These two sides are parallel!"
-(gold runs along the parallel pair, measured from the shape); "Remember," "angles on the same leg
-of a trapezium…" (the leg lights pink and each angle opens round its corner, its number popping
-with a soft tick); "add up to 180°!" (the two pieces fly out and snap together on a straight line
-before "70° + 110° = 180°" bounces in); "Yay! Shape detective!" (a chime, sparkles at the angles,
-Swiftee hops and Popo cheers). Swiftee keeps still while she explains. **G5.2**
+Before level 5 (once): **G5.1**, the sea-pearl recall (`recallAngles` in `sequences.js`, the
+card in `game.js`, the shell in `src/pearl.js`). A scallop shell on the sand wiggles twice (bubbles,
+a rattle; Popo's "!") and its ribbed lid swings up round the hinge on a glowing pearl; the whole
+lake darkens behind it. The pearl blows a shimmering bubble that rises to the middle of the screen
+with the lesson card small inside it, and pops in a spray of tiny bubbles as the big card springs
+out (Popo cheers). Then Swiftee flies in beside it and each next line waits until the card has
+drawn the last one: "Look! These two sides are parallel!" (the trapezium traces itself under its
+name, its corners get their letters A, B, C, D, its parallel sides light up pink with matching
+arrows and "AB ∥ CD"); "Remember," "angles on the same leg of a trapezium…" (for each end of the
+leg, its two sides light up one after the other, the angle between them opens as an orange
+wedge and its size pops in on the bisector); "add up to 180°!" (copies of the two wedges fly onto
+a straight line, "∠D + ∠A = 70° + 110° = 180°"); "Yay! Shape detective!". After a moment to read,
+the card floats away in a bubble that pops near the surface, the light fades, the shell closes,
+the lake brightens and the shell fades before the fish come. Everything on the card is worked out
+from the lesson's own shape (`RECALL` in `levels.js`): the angles from the two sides meeting at
+each corner, the labels on the true bisectors, the parallel pair from the classification.
+**G5.2**
 one of level 5's fish swims into the middle as Swiftee says "Look at the marked angles!", and its
 two angles glow on "angles!"; then the others swim to their places round it; then two seconds just to
 look (no text, fishing off), and the fish swim on. A right catch in level 5 shows its parallel
@@ -137,13 +146,16 @@ arrows as it is hooked.
 **G6** after the sixteenth catch: the last fish swim off, Popo dances: "Wow!" "What a catch!", and
 Swiftee: "You did it!".
 
-Then a cartoon gag, played big: a giant shadow glides under the raft (dun, dun, DUNNN, and the
-edges darken), Popo: "Whoa! A giant fish!" while Swiftee flutters to a perch beside him to
-watch. He casts and hauls ("Come on, big fish!", YANK! HEAVE!, speed lines, the screen shaking),
-and up it bursts in slow motion (SPLOOSH!)... a huge old boot dripping seaweed, with a tin can
-stuck on its toe. Swiftee: "Eek!", Popo: "Huh?!", Swiftee: "Good catch, Popo!" They both crack
-up ("Ha ha ha!" "Hee hee hee!"), Popo lets go, the boot plops back in (SPLASH!) and Swiftee
-flutters back beside him. The end is a Tom and Jerry iris: Swiftee snuggles in beside Popo, the
+Then a cartoon gag, played big ("You did it!" closes first): the lake darkens and a giant fish
+shadow glides in under the raft to a slow heartbeat, two pale eyes blinking in the dark; Popo:
+"Whoa! A giant fish!" while Swiftee flutters out to watch from the right. He hooks it and hauls
+("Come on, big fish!"): the camera leans in, speed lines streak, the water churns and rings
+spread at the line with each heave, the shadow thrashes and the screen shakes. Then a flash, a
+column of water bursts up with foam and a spray of drops, and out of the middle of it comes...
+an old boot, painted wet leather dripping seaweed with a tin can on its toe, which swings in on
+the line to dangle under the rod tip, a little stream squirting from the hole in its toe.
+Swiftee: "Eek!", Popo: "Huh?!", Swiftee: "Good catch, Popo!" They both crack up ("Ha ha ha!"
+"Hee hee hee!"), Popo lets go and the boot drops back in with a splash. The end is a Tom and Jerry iris: Swiftee snuggles in beside Popo, the
 iris closes in place on the two of them, then glides to the middle of the screen carrying the live
 scene with it (the scene slides under the curtain layer, so the circle never shows anything but
 the game), where they keep laughing in a warm sunburst under "The End", with a **Next** button. Next
@@ -185,6 +197,9 @@ Python Playwright with its Chromium (`pip install playwright && playwright insta
 - `python3 tests/asset_alpha.py` – the mishap art's transparency.
 - `python3 tests/voice.py` – every line the game can say has a recorded clip.
 - `python3 tests/stress.py` – rapid taps, pause/resume, restarts mid-scene, CPU throttling, slow loading.
+- `python3 tests/recall.py` – the recall card's mathematics against its shape (angles, wedges,
+  bisector labels, letters, statements), its order against Swiftee's lines, and its clean-up
+  after a repeat, rapid taps, a restart part way and reduced motion.
 - `python3 tests/phones.py` – Mac and phone sizes keep the same proportions, phones are filled
   (sideways when upright), and fish and Pause taps land in both orientations.
 - `python3 tests/loading.py` – the WebP copies match their PNGs; on a slow connection the title
@@ -206,7 +221,11 @@ can say has its clip. To re-record after changing a line:
 
 The narrator, Popo and Swiftee are voiced. Part 1's clips were recorded locally with
 Kokoro-82M (Apache-2.0, no account): its Hindi speakers give the narrator a clear Indian
-English voice, Popo is a lower, bouncier male voice and Swiftee a sped-up bright one:
+English voice, Popo is a lower, bouncier male voice and Swiftee a raised, bright one. Their
+pitch is raised or lowered by playing the line back faster or slower, which changes its pace too,
+so each role's speaking speed is set to land on an unhurried pace for young listeners (Swiftee
+0.8 × 1.3 ≈ 1.04, Popo 1.05 × 0.9 ≈ 0.95, the narrator 0.92). After the voice ends, a bubble stays
+up for at least 1.2 s (longer for longer lines) so a young reader can finish it:
 
 ```
 python3 -m venv ~/.cache/popo-voice311   # Python 3.10+ (e.g. via `uv python install 3.11`)

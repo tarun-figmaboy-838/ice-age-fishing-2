@@ -2,6 +2,10 @@
 'use strict';
 const { clock, ease, Cancelled, state, PHASE, newToken, isCurrent, Fish, Swiftee, STORY, LEVELS, PLACES, STAGE_W, STAGE_H } = PopoGame;
 
+// Where Swiftee hovers to explain the recall card: in the sky between Popo's rod and the card,
+// low enough that her bubble fits beside her above it.
+const RECALL_PERCH = { x: 560, y: 228 };
+
 // The hook hangs this far below the line's end.
 // the line ends at the lip; the hooked fish is drawn over the hook, so it sits inside the mouth
 const HOOK_DROP = 2;
@@ -93,7 +97,7 @@ async function correctCatch(game, fish) {
     const along = [surface.x - start.x, surface.y - start.y];
     const span = Math.hypot(...along) || 1;
     let bubbled = 0;
-    await clock.tween(850, token, (t) => {
+    await clock.tween(Math.min(1400, Math.max(850, 500 + span * 0.65)), token, (t) => {
       const k = ease.inOut(t);
       const fight = Math.sin(t * Math.PI * 6) * (1 - t) * 12;
       fish.x = start.x + along[0] * k - (along[1] / span) * fight;
@@ -601,6 +605,7 @@ async function remind(game, token) {
   while (!game.inViewTarget()) await clock.wait(100, token);
   await clock.wait(600, token);
   game.tutorialPending = true;
+  game.ui.setInstruction(''); // it comes back with the fishing, clear of Swiftee's bubble
   game.showHandOn(game.inViewTarget());
   game.hookRing = { t: 0 };
   await swifteeArrives(game, STORY.remind, token);
@@ -712,35 +717,100 @@ async function rowOn(game, to, token) {
   await clock.wait(350, token);
 }
 
-// G5.1, once before level 5: something tugs Popo's line (the hook dips, he starts with a "!" and the
-// raft wobbles, then settles); then Swiftee flies in and, with the recall card following her words,
-// shows the trapezium's parallel sides and recalls that the angles on the same leg add up to 180°.
+// G5.1, the angle recall: a shell on the sand wiggles twice (Popo spots it) and opens round its
+// hinge on a glowing pearl; the lake darkens, and the pearl blows the big lesson card up into the
+// middle of the screen in a bubble that pops, which makes Popo cheer. Then Swiftee flies in beside it and explains, and
+// each next line waits until the card has finished drawing the last one. At the end: a moment to
+// read, a last sparkle, the card floats away in a bubble, the light fades as the shell closes and
+// the lake brightens, and the shell fades from the sand before the fish come.
 async function recallAngles(game, token) {
-  const { popo, audio } = game;
+  const { popo, audio, fx } = game;
+  const quick = fx.reduced;
   state.phase = PHASE.RECALL;
   game.ui.setInstruction('');
-  const { line } = popo;
-  line.mode = 'flight';
-  audio.play('boing');
-  game.mark = { char: '!', t: 0, colour: '#ffd23f' };
+  const r = game.showRecall();
+  const { shell } = r;
+  const until = async (done) => {
+    while (!done()) await clock.wait(50, token);
+  };
+  const [look, remember, leg, sum, cheer] = STORY.recall;
+  const [px, py] = game.pearlAt();
   try {
-    await clock.tween(game.fx.reduced ? 500 : 1000, token, (t) => {
-      const tug = Math.sin(Math.min(1, t / 0.35) * Math.PI);
-      const tip = popo.rodTip();
-      line.hook = { x: tip.x, y: tip.y + line.length + 26 * tug };
-      line.tension = tug;
-      popo.tilt = 0.03 * Math.sin(t * Math.PI * 3) * (1 - t);
-    });
-  } finally {
-    line.mode = 'dangle';
-    line.tension = 0;
+    audio.play('bubbles');
+    await clock.tween(350, token, (t) => { shell.alpha = t; });
+    game.mark = { char: '!', t: 0, colour: '#ffd23f' };
+    audio.play('boing');
+    for (let i = 0; i < 2; i += 1) {
+      audio.play('rattle');
+      fx.puff(px + (i ? 34 : -34), py - 6, i ? 1 : -1, 2, false); // a few bubbles escape
+      await clock.tween(quick ? 220 : 340, token, (t) => {
+        shell.rock = quick ? 0 : 0.08 * Math.sin(t * Math.PI * 2) * (i ? -1 : 1);
+        shell.leak = 0.35 + 0.3 * (i + t);
+        popo.tilt = 0.025 * Math.sin(t * Math.PI * 2) * (1 - t);
+      });
+    }
+    shell.rock = 0;
     popo.tilt = 0;
+    await clock.tween(quick ? 60 : 150, token, (t) => { shell.squash = Math.sin((t * Math.PI) / 2); });
+    audio.play('shellOpen');
+    await clock.tween(quick ? 350 : 700, token, (t) => {
+      shell.squash = 1 - t;
+      shell.open = quick ? t : ease.outBack(t);
+      shell.leak = 1 - t;
+      r.glow = 0.6 * t;
+    });
+    audio.play('shimmer');
+    await clock.tween(quick ? 350 : 800, token, (t) => {
+      shell.pearl = 1 + 0.16 * Math.sin(t * Math.PI);
+      r.glow = 0.6 + 0.4 * t;
+      r.dim = ease.inOut(t);
+    });
+    // the pearl blows the card up in a bubble, which pops in the middle of the screen
+    audio.play('rise');
+    r.spawning = true;
+    await clock.tween(quick ? 600 : 1900, token, (t) => {
+      r.emerge = t;
+      r.beam = Math.min(1, t * 2);
+    });
+    r.spawning = false;
+    audio.play('land');
+    popo.act('catch');
+    await clock.tween(600, token, (t) => {
+      r.flash = 1 - t;
+      r.beam = 1 - 0.65 * t; // it keeps projecting, softly, while Swiftee explains
+      r.glow = 1 - 0.6 * t;
+    });
+    await swifteeArrives(game, [look], token, {
+      to: RECALL_PERCH,
+      dip: -40,
+      onLand: (bird) => { bird.dir = 1; }, // she turns to watch the card
+    });
+    await until(() => r.t >= r.parallel + 1);
+    await game.sayAll([remember, leg], token);
+    await until(() => r.t >= r.anglesDone + 0.3);
+    await game.sayAll([sum], token);
+    await until(() => r.t >= r.sum + 1.4);
+    await game.sayAll([cheer], token);
+    await clock.wait(1200, token); // a moment to read it all
+    audio.play('shimmer');
+    fx.sparkle(px, py - 8, 6);
+    game.hideRecall(); // the card shrinks into a bubble, which floats up and pops
+    audio.play('bubbles');
+    await clock.wait(quick ? 600 : 1100, token);
+    await clock.tween(500, token, (t) => {
+      r.beam = 0.35 * (1 - t);
+      r.glow = 0.4 * (1 - t);
+    });
+    audio.play('click');
+    await clock.tween(quick ? 350 : 750, token, (t) => {
+      shell.open = 1 - ease.inOut(t);
+      r.dim = 1 - t;
+    });
+    await clock.tween(400, token, (t) => { shell.alpha = 1 - t; });
+  } finally {
+    popo.tilt = 0;
+    if (game.recall === r) game.recall = null;
   }
-  await clock.wait(150, token);
-  await swifteeArrives(game, STORY.recall, token);
-  await clock.wait(400, token); // a moment to look before the card goes
-  game.hideRecall();
-  await clock.wait(350, token);
 }
 
 // Where level 5's fish stop for the look, as fractions of the swim area: the first in the middle,
@@ -779,7 +849,9 @@ async function observeAngles(game, next, token) {
   await arriving;
   game.spotlight = null;
   await swimIn(plan.slice(1), 1300, 140);
+  for (const fish of state.fish) fish.showMarks();
   await clock.wait(2000, token); // two seconds just to look
+  for (const fish of state.fish) fish.hideMarks();
   for (const fish of state.fish) fish.release();
   await swifteeLeaves(game, token);
 }
@@ -795,7 +867,9 @@ async function celebrate(game, token) {
   await game.sayAll(STORY.wow, token);
   popo.idle();
   await swifteeArrives(game, STORY.done, token);
-  await clock.wait(500, token);
+  await clock.wait(900, token);
+  game.endLine(); // "You did it!" closes before the lake goes dark
+  await clock.wait(400, token);
   await bigCatch(game, token);
   await theEnd(game, token);
   game.awaitingNext = true; // the game stays pausable until Next ends it
@@ -803,37 +877,47 @@ async function celebrate(game, token) {
   audio.play('bloop');
 }
 
-// Before the end, a cartoon gag, played big: a giant shadow glides under the raft (dun, dun,
-// DUNNN), Popo hooks it and hauls (YANK! HEAVE!) and up it bursts (SPLOOSH!)... an old boot.
-// Swiftee, startled up out of its way, says "Good catch, Popo!" and they fall about laughing as
-// Popo lets go and the boot plops back into the lake.
+// The big catch, before the end: the lake darkens and a giant fish shadow glides in under the
+// raft to a slow heartbeat, two pale eyes blinking in the dark. Popo: "Whoa! A giant fish!"
+// He hooks it and hauls, the camera leaning in: the water churns and rings spread at the line
+// with every heave, the shadow thrashes, everything shakes. Then a flash, a column of water
+// bursts up, and out of it flips... an old boot. They stare; "Huh?!"; "Good catch, Popo!"; both
+// crack up, and the boot drops back in with a splash while they laugh on.
 async function bigCatch(game, token) {
   const { popo, fx, audio } = game;
   const wl = game.waterline;
   const bird = game.swiftee;
-  const shadow = game.showShadow(STAGE_W + 320, wl + 230);
+  const shadow = game.showShadow(STAGE_W + 420, wl + 250);
   audio.play('drama');
-  game.vignetteTo = 0.6;
-  await clock.tween(2000, token, (t) => {
-    shadow.x = STAGE_W + 320 + (760 - STAGE_W - 320) * ease.out(t);
+  game.vignetteTo = 0.7;
+  let beat = -1;
+  await clock.tween(2600, token, (t) => {
+    shadow.x = STAGE_W + 420 + (800 - STAGE_W - 420) * ease.out(t);
+    shadow.eyes = Math.max(0, Math.min(1, (t - 0.3) / 0.3));
+    const b = Math.floor(t * 4);
+    if (b !== beat) {
+      beat = b;
+      audio.play('thump');
+    }
+    if (Math.random() < 0.1) fx.puff(shadow.x - 150 + Math.random() * 260, shadow.y - 80, 0, 1, true);
   });
   popo.act('catch');
-  // Swiftee flutters to a perch beside Popo to watch, clear of the line and whatever comes up
-  const perch = { x: 120, y: 165 };
-  const watching = bird ? flyTo(game, bird, perch, 800, token, 1) : Promise.resolve();
-  watching.catch(() => {});
+  // Swiftee flutters out to watch from the right, clear of the line, the spout and the boot's
+  // swing, so Popo's side and hers each keep their own room
+  if (bird) await flyTo(game, bird, { x: 880, y: 200 }, 800, token, -1);
   await game.say(STORY.whoa, token);
-  await watching;
-  game.vignetteTo = 0;
   // cast at it, and the line goes tight
-  await castTo(game, { x: shadow.x - 90, y: shadow.y - 30, w: 1, h: 1, dir: -1, scale: 1, mouth: [0.5, 0.5] }, token);
+  await castTo(game, { x: shadow.x - 150, y: shadow.y - 40, w: 1, h: 1, dir: -1, scale: 1, mouth: [0.5, 0.5] }, token);
   audio.play('hooked');
+  game.vignetteTo = 0.4;
   popo.playFrames('casting', ['reel', 'reel2'], 130, true);
   const hold = { x: popo.line.hook.x, y: popo.line.hook.y };
   const shouting = game.say(STORY.heave, token);
   shouting.catch(() => {});
   game.speedLines = 1;
+  game.zoomTo(1.07, hold.x - 120, wl);
   let yanks = -1;
+  const deep = shadow.baseY;
   await clock.tween(2800, token, (t) => {
     const ms = t * 2800;
     const yank = Math.floor(ms / 560);
@@ -842,10 +926,9 @@ async function bigCatch(game, token) {
       audio.play('tug');
       audio.play(yank % 2 ? 'thump' : 'creak');
       fx.splash(hold.x + (Math.random() - 0.5) * 30, wl, yank % 2 === 1);
-      if (yank > 0) {
-        game.burst(yank % 2 ? 'HEAVE!' : 'YANK!', hold.x + 70 + (yank % 2) * 150, wl - 70 - (yank % 3) * 25, 0.8);
-        game.shake(5, 0.25);
-      }
+      fx.ripple(hold.x, wl + 4, 1 + 0.4 * (yank % 2));
+      fx.puff(hold.x + 20, wl + 30, 0, 3, true);
+      if (yank > 0) game.shake(6, 0.28);
       if (bird) bird.hop();
     }
     const jerk = Math.sin((ms / 560) * Math.PI * 2);
@@ -854,34 +937,50 @@ async function bigCatch(game, token) {
     popo.line.tension = 1.7 + 0.5 * Math.abs(jerk);
     popo.line.hook.x = hold.x + jerk * 24;
     popo.line.hook.y = hold.y + Math.abs(jerk) * 10;
-    shadow.x = hold.x + 90 + jerk * 40;
+    // the shadow thrashes and is dragged up towards the surface
+    shadow.x = hold.x + 150 + jerk * 50;
+    shadow.baseY = deep - 90 * t + Math.abs(jerk) * 16;
+    shadow.wag += 0.35;
   });
   await shouting;
-  // the big heave: it bursts out of the water in slow motion, and Swiftee flutters up out of its way
+  // up it bursts: a flash, a column of water, rings, a big shake... and it's a boot
   game.speedLines = 0;
+  game.zoomTo(1);
+  game.vignetteTo = 0;
+  game.flash = 1;
+  game.geyser = { x: hold.x, t: 0 };
+  game.sprayFrom(hold.x, wl - 20, 46, 1.1);
   audio.play('splashBig');
   audio.play('leap');
   fx.splash(hold.x, wl, true);
   fx.splash(hold.x + 40, wl, true);
-  game.burst('SPLOOSH!', hold.x + 230, wl - 190, 1.2);
+  fx.ripple(hold.x, wl + 4, 2.2);
   game.shake(14, 0.55);
   game.shadow = null;
   popo.stopFrames();
   popo.tilt = 0;
   popo.lean = 0;
   popo.setPose('casting', 'up');
-  const boot = game.showTrash(hold.x, wl + 40);
-  const hang = { x: popo.raftRight().x + 470, y: wl - 330 };
+  // up the middle of the spout it comes (the boot hangs by its loop, so it's centred under it)...
+  const centre = hold.x - 34 * 1.05;
+  const boot = game.showTrash(centre, wl + 60);
+  const top = wl - 250;
   if (bird) {
     bird.hop();
     game.say(STORY.eek, token).catch(() => {});
   }
-  await clock.tween(1300, token, (t) => {
-    const k = ease.out(t);
-    boot.x = hold.x + (hang.x - hold.x) * k;
-    boot.y = wl + 40 + (hang.y - wl - 40) * k - Math.sin(t * Math.PI) * 70;
-    boot.angle = 0.6 * (1 - k);
+  await clock.tween(420, token, (t) => {
+    boot.y = wl + 60 + (top - wl - 60) * ease.out(t);
+    boot.angle = 0.2 * Math.sin(t * Math.PI);
     popo.line.tension = 1;
+  });
+  // ...and swings in on the line, a flip on the way, to dangle below the rod tip
+  const hang = game.bootHang();
+  await clock.tween(1100, token, (t) => {
+    const k = ease.inOut(t);
+    boot.x = centre + (hang.x - centre) * k;
+    boot.y = top + (hang.y - top) * k - Math.sin(t * Math.PI) * 70;
+    boot.angle = -0.9 * Math.sin(k * Math.PI) + 0.25 * (1 - k);
   });
   boot.hanging = true;
   boot.t = 0;
@@ -889,23 +988,24 @@ async function bigCatch(game, token) {
   await clock.wait(700, token); // a beat, all staring at it
   await game.say(STORY.huh, token);
   await game.say(STORY.goodCatch, token);
-  // both crack up, and Popo lets go of the rod: the boot drops back in with a sploosh, while
-  // Swiftee, laughing, flutters back down beside him
+  // both crack up, and Popo lets go of the rod: the boot drops back in with a splash, while
+  // Swiftee, laughing, stays on her perch
   if (bird) bird.laughing = true;
   popo.idle();
   popo.act('giggle', true); // one laugh on and on, rod down, through to the end
   audio.play('laugh');
   boot.hanging = false;
-  const top = boot.y;
+  const from = boot.y;
   let splashed = false;
   const drop = clock.tween(800, token, (t) => {
-    boot.y = top + 640 * t * t;
+    boot.y = from + 640 * t * t;
     boot.angle = 0.5 * t;
-    if (!splashed && boot.y + 250 > wl) {
+    if (!splashed && boot.y + 150 > wl) {
       splashed = true;
       fx.splash(boot.x + 30, wl, true);
+      fx.ripple(boot.x + 30, wl + 4, 1.8);
+      game.sprayFrom(boot.x + 40, wl - 10, 24, 0.7);
       audio.play('splashBig');
-      game.burst('SPLASH!', boot.x + 40, wl - 110, 1);
       game.shake(6, 0.3);
     }
   });
@@ -914,14 +1014,11 @@ async function bigCatch(game, token) {
     popo.line.mode = 'dangle';
     popo.line.tension = 0;
   }).catch(() => {});
-  const back = bird ? flyTo(game, bird, { x: popo.anchor.x + 360, y: popo.anchor.y - 130 }, 1100, token, -1) : Promise.resolve();
-  back.catch(() => {});
   for (const line of STORY.laughs) {
     if (line.who === 'swiftee') audio.play('giggle');
     await game.say(line, token);
   }
   await drop;
-  await back;
 }
 
 // Swiftee flutters to a spot in a little arc, then faces `facing` (1 right, -1 left).
@@ -999,13 +1096,13 @@ async function closeCurtain(game) {
   game.complete();
 }
 
-// Swiftee swoops in from the right, answers Popo while still in flight, and settles into a
-// hover beside him, facing him.
-async function swifteeArrives(game, lines, token, onLine = () => {}) {
-  const { popo, fx, audio } = game;
+// Swiftee swoops in from the right, below the sound and pause buttons, answers Popo while still in
+// flight, and settles into a hover beside him, facing him. Options: `to` where she hovers, `dip`
+// how far the swoop dips mid-flight (negative arcs up), `onLand` once she has settled.
+async function swifteeArrives(game, lines, token, { onLine = () => {}, to = { x: game.popo.anchor.x + 360, y: game.popo.anchor.y - 130 }, dip = 50, onLand = () => {} } = {}) {
+  const { fx, audio } = game;
   const [first, ...rest] = [].concat(lines);
-  const from = { x: STAGE_W + 140, y: 120 };
-  const to = { x: popo.anchor.x + 360, y: popo.anchor.y - 130 };
+  const from = { x: STAGE_W + 140, y: Math.max(230, to.y) };
   const bird = new Swiftee(from.x, from.y);
   bird.faceViewer = lines === STORY.welcome;
   bird.onDownstroke = () => audio.play('flap');
@@ -1016,7 +1113,7 @@ async function swifteeArrives(game, lines, token, onLine = () => {}) {
     const k = ease.out(t);
     bird.x = from.x + (to.x - from.x) * k;
     // a swoop: dips on the way in and pulls up into the hover
-    bird.y = from.y + (to.y - from.y) * k + Math.sin(k * Math.PI) * 80;
+    bird.y = from.y + (to.y - from.y) * k + Math.sin(k * Math.PI) * dip;
     bird.lean = 0.32 * (1 - t) ** 1.5;
     bird.flapRate = 11 + 9 * (1 - t);
     if (Math.random() < 0.25 * (1 - t)) fx.sparkle(bird.x + 70, bird.y + (Math.random() - 0.5) * 60, 1);
@@ -1028,11 +1125,12 @@ async function swifteeArrives(game, lines, token, onLine = () => {}) {
   });
   bird.lean = 0;
   bird.onDownstroke = null;
+  onLand(bird);
   if (talking) await talking;
   await game.sayAll(rest, token, (i) => onLine(i + 1));
 }
 
-// Swiftee flies off up and away to the right.
+// Swiftee flies off to the right, gathering speed.
 async function swifteeLeaves(game, token) {
   const bird = game.swiftee;
   if (!bird) return;
@@ -1042,10 +1140,12 @@ async function swifteeLeaves(game, token) {
   bird.onDownstroke = () => game.audio.play('flap');
   game.audio.play('whoosh');
   try {
-    await clock.tween(game.fx.reduced ? 600 : 1000, token, (t) => {
-      const k = ease.in(t);
+    // off to the right, staying below the buttons and the instruction
+    const end = Math.max(from.y, 230);
+    await clock.tween(game.fx.reduced ? 600 : 1300, token, (t) => {
+      const k = t * t;
       bird.x = from.x + (STAGE_W + 200 - from.x) * k;
-      bird.y = from.y - 220 * Math.sin((k * Math.PI) / 2);
+      bird.y = from.y + (end - from.y) * k - 25 * Math.sin(k * Math.PI);
       bird.lean = -0.25 * t;
       bird.flapRate = 14 + 8 * t;
     });

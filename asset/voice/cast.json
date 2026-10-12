@@ -4,11 +4,11 @@
     "about": "Kokoro hf_alpha"
   },
   "popo": {
-    "voice": "kokoro:hm_psi:1.12:0.9",
+    "voice": "kokoro:hm_psi:1.05:0.9",
     "about": "Kokoro hm_psi"
   },
   "swiftee": {
-    "voice": "kokoro:hf_beta:1.12:1.3",
+    "voice": "kokoro:hf_beta:0.8:1.3",
     "about": "Kokoro hf_beta"
   }
 }

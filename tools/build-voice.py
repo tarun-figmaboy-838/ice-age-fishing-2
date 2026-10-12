@@ -80,14 +80,16 @@ CAST = {
         style='Quick, chirpy and squeaky with delight, like a tiny excited bird.'),
 }
 # The same roles for the local Kokoro engine: voice, speaking speed, and a pitch factor applied
-# afterwards (below 1 is deeper and bigger, above 1 higher and smaller). British-English
+# afterwards (below 1 is deeper and bigger, above 1 higher and smaller). The pitch is applied by
+# playing the line back faster or slower, so it changes the pace too: the pace heard is speed x
+# pitch (Swiftee 0.8 x 1.3, about 1.04; Popo 1.05 x 0.9, about 0.95), unhurried for young ears. British-English
 # pronunciation ('b') sits closer to Indian English than American.
 KOKORO = {
     'narrator': dict(voice='hf_alpha', lang='b', speed=0.92, pitch=1.0,
                      audition=['hf_alpha', 'hf_beta', 'bf_emma']),
-    'popo': dict(voice='hm_psi', lang='b', speed=1.12, pitch=0.9,
+    'popo': dict(voice='hm_psi', lang='b', speed=1.05, pitch=0.9,
                  audition=['hm_psi', 'hm_omega', 'am_puck', 'am_fenrir']),
-    'swiftee': dict(voice='hf_beta', lang='b', speed=1.12, pitch=1.3,
+    'swiftee': dict(voice='hf_beta', lang='b', speed=0.8, pitch=1.3,
                     audition=['hf_beta', 'hf_alpha', 'af_heart']),
 }
 AUDITION_LINE = {'narrator': 'Popo *loves* fishing.', 'popo': 'Whoopsie Doopsie!', 'swiftee': "Let's find *out!*"}

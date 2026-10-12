@@ -91,7 +91,7 @@ const FISH = [
 ];
 
 // The angle recall before level 5: one trapezium, its left leg, and the angles at its two ends.
-const RECALL = { body: angled({ bottom: 10, side: 5, angles: [70, 110, 62] }), corners: [0, 3] };
+const RECALL = { body: angled({ bottom: 10, side: 5, angles: [70, 110, 62] }), corners: [0, 3], names: ['D', 'C', 'B', 'A'] };
 
 // place: where on the lake it plays (PLACES). school: fish swimming when the level starts;
 // targets: catches among them; least: distractors top the school up so it never drops below this.
@@ -133,11 +133,11 @@ const STORY = {
   // sides light up on "parallel!", the leg and its angles come on "leg", the two angles snap into a
   // straight line on "180°!", and a little celebration on "Yay!"
   recall: [
-    { who: 'swiftee', text: 'Look! These two sides are *parallel!*', cue: [{ word: 0, do: 'recallCard' }, { word: 5, do: 'recallParallel' }] },
+    { who: 'swiftee', text: 'Look! These two sides are *parallel!*', cue: [{ word: 0, do: 'recall:shape' }, { word: 5, do: 'recall:parallel' }] },
     { who: 'swiftee', text: '*Remember,*' },
-    { who: 'swiftee', text: 'angles on the same *leg* of a trapezium…', cue: { word: 4, do: 'recallLeg' } },
-    { who: 'swiftee', text: 'add up to *180°!*', cue: { word: 3, do: 'recallSum' } },
-    { who: 'swiftee', text: 'Yay! Shape *detective!*', cue: { word: 0, do: 'recallCheer' } },
+    { who: 'swiftee', text: 'angles on the same *leg* of a trapezium…', cue: { word: 4, do: 'recall:angles' } },
+    { who: 'swiftee', text: 'add up to *180°!*', cue: { word: 3, do: 'recall:sum' } },
+    { who: 'swiftee', text: 'Yay! Shape *detective!*', cue: { word: 0, do: 'recall:cheer' } },
   ],
   observe: [{ who: 'swiftee', text: 'Look at the marked *angles!*', cue: { word: 4, do: 'showAngles' } }],
   // after a right catch Popo says these in turn
