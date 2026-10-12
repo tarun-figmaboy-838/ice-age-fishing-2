@@ -753,14 +753,14 @@ async function recallAngles(game, token) {
     popo.tilt = 0;
     await clock.tween(quick ? 60 : 150, token, (t) => { shell.squash = Math.sin((t * Math.PI) / 2); });
     audio.play('shellOpen');
-    await clock.tween(quick ? 350 : 700, token, (t) => {
+    await clock.tween(quick ? 350 : 900, token, (t) => {
       shell.squash = 1 - t;
       shell.open = quick ? t : ease.outBack(t);
       shell.leak = 1 - t;
       r.glow = 0.6 * t;
     });
     audio.play('shimmer');
-    await clock.tween(quick ? 350 : 800, token, (t) => {
+    await clock.tween(quick ? 350 : 1000, token, (t) => {
       shell.pearl = 1 + 0.16 * Math.sin(t * Math.PI);
       r.glow = 0.6 + 0.4 * t;
       r.dim = ease.inOut(t);
@@ -768,14 +768,14 @@ async function recallAngles(game, token) {
     // the pearl blows the card up in a bubble, which pops in the middle of the screen
     audio.play('rise');
     r.spawning = true;
-    await clock.tween(quick ? 600 : 1900, token, (t) => {
+    await clock.tween(quick ? 600 : 2700, token, (t) => {
       r.emerge = t;
       r.beam = Math.min(1, t * 2);
     });
     r.spawning = false;
     audio.play('land');
     popo.act('catch');
-    await clock.tween(600, token, (t) => {
+    await clock.tween(800, token, (t) => {
       r.flash = 1 - t;
       r.beam = 1 - 0.65 * t; // it keeps projecting, softly, while Swiftee explains
       r.glow = 1 - 0.6 * t;
@@ -796,7 +796,7 @@ async function recallAngles(game, token) {
     fx.sparkle(px, py - 8, 6);
     game.hideRecall(); // the card shrinks into a bubble, which floats up and pops
     audio.play('bubbles');
-    await clock.wait(quick ? 600 : 1100, token);
+    await clock.wait(quick ? 600 : 1600, token);
     await clock.tween(500, token, (t) => {
       r.beam = 0.35 * (1 - t);
       r.glow = 0.4 * (1 - t);

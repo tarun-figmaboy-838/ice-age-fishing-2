@@ -25,6 +25,9 @@ const BUBBLE = { radius: 290, seed: 62, blow: 0.3, pop: 0.78, surface: 440 };
 const BOOT = { scale: 1.05, hang: [14, 34] };
 const RECALL_FONT = '700 34px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
 const RECALL_TITLE = '700 42px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
+// The card's lesson runs on its own clock, this much slower than real time, so every step reads
+// calmly; Swiftee's next line still waits for each step to finish.
+const RECALL_PACE = 1.35;
 const ANGLE_STEPS = { leg: 0.25, side: [0.85, 2.55], sector: [1.35, 3.05], label: [1.8, 3.5], pulse: [2.1, 3.8], again: 2.2, done: 4.15 };
 
 // The title banner: its water surface, sand line, the open water the decorative fish swim
@@ -1305,7 +1308,7 @@ class Game {
   // "Yay!" a chime, a hop from Swiftee and sparkles over the straight line.
   updateRecall(dt) {
     const r = this.recall;
-    r.t += dt;
+    r.t += dt / RECALL_PACE;
     const once = (key, time, fn) => {
       if (r.t >= time && !r.fired.has(key)) {
         r.fired.add(key);
@@ -1345,7 +1348,7 @@ class Game {
       m.y += m.vy * dt;
     }
     r.motes = r.motes.filter((m) => m.life < 1.3 && m.y > RECALL_CARD.y + RECALL_CARD.h / 2);
-    if (r.leaving) r.cardOut = Math.min(1, r.cardOut + dt / 1.1);
+    if (r.leaving) r.cardOut = Math.min(1, r.cardOut + dt / 1.6);
     // the bubble pops: arriving in the middle, and leaving near the surface
     const burst = (x, y, radius) => {
       this.audio.play('pop');
@@ -1493,8 +1496,10 @@ class Game {
         card: small * (radius / BUBBLE.radius),
       };
     }
+    // ...and out springs the card, settling with the gentlest overshoot
     const spring = Math.min(1, (r.emerge - BUBBLE.pop) / (1 - BUBBLE.pop));
-    return { x: C.x, y: C.y, radius: 0, card: small + (1 - small) * (still ? 1 : ease.outBack(spring)) };
+    const settle = 1 + 1.5 * (spring - 1) ** 3 + 0.5 * (spring - 1) ** 2;
+    return { x: C.x, y: C.y, radius: 0, card: small + (1 - small) * (still ? 1 : settle) };
   }
 
   // The pearl's beam: up from the pearl, then open into a cone whose top is the card's bottom edge,
