@@ -156,12 +156,14 @@ class Swimmer {
   }
 
   // Dash off to the right, then come back in from the edge at cruising speed.
+  // Off it swims at the end of a level: to the nearer edge (turning round first if that edge is
+  // behind it), speeding up as it goes. Never faded, so it keeps its whole look to the edge.
   escape() {
     this.escaping = true;
     this.frozen = false;
-    this.turn = null;
-    this.dir = 1;
-    this.speed = 260;
+    this.dart = null;
+    const ahead = this.dir > 0 ? STAGE_W - this.x : this.x;
+    this.turn = ahead > STAGE_W / 2 ? { stage: 'slow', t: 0, from: this.speed } : null;
   }
 
   update(dt, area, others) {
@@ -183,9 +185,24 @@ class Swimmer {
       return;
     }
     if (this.escaping) {
-      this.x += this.speed * dt;
-      if (PopoGame.state.phase === 'levelTransition') this.alpha = Math.max(0, this.alpha - dt / 0.6);
-      if (this.x > STAGE_W + this.w) this.goOffstage(Infinity);
+      if (this.turn) {
+        // a quick turn round, towards the nearer edge
+        this.turn.t += dt;
+        const k = Math.min(1, this.turn.t / 0.22);
+        if (this.turn.stage === 'slow') {
+          this.speed = this.turn.from * (1 - k);
+          if (k >= 1) {
+            this.dir *= -1;
+            this.turn = { stage: 'go', t: 0 };
+            this.wiggle(true);
+          }
+        } else if (k >= 1) {
+          this.turn = null;
+        }
+      }
+      if (!this.turn || this.turn.stage === 'go') this.speed = Math.min(620, this.speed + 1300 * dt);
+      this.x += this.dir * this.speed * dt;
+      if (this.x > STAGE_W + this.w || this.x < -this.w) this.goOffstage(Infinity);
       return;
     }
 

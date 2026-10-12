@@ -155,7 +155,18 @@ column of water bursts up with foam and a spray of drops, and out of the middle 
 an old boot, painted wet leather dripping seaweed with a tin can on its toe, which swings in on
 the line to dangle under the rod tip, a little stream squirting from the hole in its toe.
 Swiftee: "Eek!", Popo: "Huh?!", Swiftee: "Good catch, Popo!" They both crack up ("Ha ha ha!"
-"Hee hee hee!"), Popo lets go and the boot drops back in with a splash. The end is a Tom and Jerry iris: Swiftee snuggles in beside Popo, the
+"Hee hee hee!"), Popo lets go and the boot drops back in with a splash.
+
+Little extras for fun: three right catches in a row and Popo does a victory dance in a burst of
+bubble confetti; a tap on Swiftee makes her twirl, a tap on the bucket has the last fish caught
+peek out and waggle hello, and a tap on a seaweed sets it wiggling; once a level a penguin
+belly-slides along the far shore; at the end of each level the last fish caught hops out of the
+bucket like a dolphin ("!") and drops back in, which cracks Popo up; and in the end circle Popo
+laughs so hard he rocks right off the raft into the lake, pops up grinning and climbs back on
+(the same tumble as a wrong catch, `tumbleKeys`/`runTumble` in `sequences.js`); Swiftee, beside
+him on his right, darts up out of the picture as he tips her way and swoops back in once he's
+aboard, and they laugh on together. Fish left at the end of a level swim off to the
+nearer edge in their full colours (no fading). The end is a Tom and Jerry iris: Swiftee snuggles in beside Popo, the
 iris closes in place on the two of them, then glides to the middle of the screen carrying the live
 scene with it (the scene slides under the curtain layer, so the circle never shows anything but
 the game), where they keep laughing in a warm sunburst under "The End", with a **Next** button. Next

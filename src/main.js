@@ -23,8 +23,10 @@ ui.on('playPress', () => game.onPlayPress());
 ui.on('fishTap', (fish, point) => game.onFishTap(fish, point));
 document.getElementById('stage').addEventListener('pointerdown', (e) => {
   if (e.target.closest('button, .hud, .overlay')) return;
+  const point = stage.toStage(e.clientX, e.clientY);
+  if (game.onCharacterTap(point)) return; // Swiftee twirls, a fish peeks out of the bucket
   if (game.skipDialogue()) return;
-  game.onWaterTap(stage.toStage(e.clientX, e.clientY));
+  game.onWaterTap(point);
 });
 ui.on('pause', () => { audio.play('ui'); game.togglePause(); });
 ui.on('resume', () => { audio.play('ui'); game.togglePause(); });

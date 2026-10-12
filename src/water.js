@@ -46,6 +46,7 @@ uniform float uMix;
 uniform float uAmp;
 uniform float uSurface;
 uniform vec4 uPlants[8];
+uniform float uWiggle[8];
 uniform sampler2D uMaskFrom;
 uniform sampler2D uMaskTo;
 
@@ -69,6 +70,8 @@ vec2 displace(vec2 p, float open) {
     // bends grow toward the plant's tip and stop just above it, so the water and sky above stay put
     float h = clamp((pl.w - p.y) / max(1.0, pl.w - pl.z), 0.0, 1.0) * smoothstep(pl.z - 36.0, pl.z, p.y);
     float bend = h * h * (7.0 * sin(t * 0.9 + pl.x * 0.013) + 2.6 * sin(t * 1.7 + p.y * 0.05 + pl.x));
+    // a tapped plant wiggles for a moment
+    bend += uWiggle[i] * h * h * 14.0 * sin(t * 9.0 + p.y * 0.04);
     d.x += inside * bend;
   }
   return d * uAmp;
@@ -150,7 +153,7 @@ class WaterScene {
     gl.enableVertexAttribArray(aPos);
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
     this.u = {};
-    for (const name of ['uFrom', 'uTo', 'uStage', 'uTime', 'uWater', 'uSeabed', 'uMix', 'uAmp', 'uSurface', 'uPlants', 'uMaskFrom', 'uMaskTo']) {
+    for (const name of ['uFrom', 'uTo', 'uStage', 'uTime', 'uWater', 'uSeabed', 'uMix', 'uAmp', 'uSurface', 'uPlants', 'uWiggle', 'uMaskFrom', 'uMaskTo']) {
       this.u[name] = gl.getUniformLocation(this.program, name);
     }
     gl.uniform1i(this.u.uFrom, 0);
@@ -231,7 +234,7 @@ class WaterScene {
     return this.whiteTex;
   }
 
-  render({ from, to, mix, time, waterline, plants, amplitude, surface = 1, seabed = SEABED_Y }) {
+  render({ from, to, mix, time, waterline, plants, wiggles = [], amplitude, surface = 1, seabed = SEABED_Y }) {
     const gl = this.gl;
     const fromTex = this.texture(from);
     const toTex = fromTex && this.texture(to || from);
@@ -257,6 +260,9 @@ class WaterScene {
     const data = new Float32Array(32);
     plants.slice(0, 8).forEach((p, i) => data.set([p.left, p.right, p.top, p.root], i * 4));
     gl.uniform4fv(this.u.uPlants, data);
+    const wiggle = new Float32Array(8);
+    wiggles.slice(0, 8).forEach((w, i) => { wiggle[i] = w * w; });
+    gl.uniform1fv(this.u.uWiggle, wiggle);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     return true;
   }

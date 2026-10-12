@@ -21,6 +21,9 @@ const RECALL_PIECES = ['#ffb347', '#ff8f3a'];
 // lets go, when it lets go and when it pops on the way in (as shares of the arrival), and how
 // high it floats on the way out.
 const BUBBLE = { radius: 290, seed: 62, blow: 0.3, pop: 0.78, surface: 440 };
+// The penguin that belly-slides along the far shore once a level: how far into the level it may
+// come (seconds), how long it takes to cross, and the snow line it slides on.
+const PENGUIN = { after: [7, 16], cross: 7.5, y: 309 };
 // The old boot at the end: its size, and where it hangs below the rod tip.
 const BOOT = { scale: 1.05, hang: [14, 34] };
 const RECALL_FONT = '700 34px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
@@ -276,6 +279,8 @@ class Game {
   // swimming in from either side one after another, in no particular order.
   startLevel(index) {
     state.level = index;
+    const [a, b] = PENGUIN.after;
+    this.penguin = { wait: a + Math.random() * (b - a), t: 0, dir: Math.random() < 0.5 ? 1 : -1 };
     if (this.place !== LEVELS[index].place) {
       this.place = LEVELS[index].place;
       this.applyScene();
@@ -502,6 +507,7 @@ class Game {
     }
     if (state.paused || state.phase === PHASE.COMPLETE) return;
     if (point.y < this.waterline) return;
+    this.wiggleSeaweed(point);
     this.fx.puff(point.x, point.y, 0, 5, true);
     if (point.y < this.waterline + 40) this.fx.ripple(point.x, this.waterline, 0.6);
     this.audio.play('bloop');
@@ -898,6 +904,7 @@ class Game {
   }
 
   updateStoryFx(dt) {
+    this.updateFun(dt);
     if (this.recall) this.updateRecall(dt);
     if (this.hookRing) this.hookRing.t += dt;
     if (this.shadow) this.shadow.update(dt, this.area);
@@ -1174,7 +1181,7 @@ class Game {
       this.syncWaterCanvas();
       const drawn = this.water.render({
         from: current, to: next, mix: k, time: this.fx.t, waterline: this.waterline,
-        plants: this.fx.plantsFor(index), amplitude: this.fx.reduced ? 0.35 : 1,
+        plants: this.fx.plantsFor(index), wiggles: this.plantWiggle, amplitude: this.fx.reduced ? 0.35 : 1,
       });
       if (drawn) {
         this.water.show(true);
@@ -1929,6 +1936,7 @@ class Game {
       return;
     }
     const offset = this.drawBackground(ctx);
+    this.drawPenguin(ctx);
     this.fx.drawWater(ctx, offset, state.fish);
     for (const f of this.ambient) f.draw(ctx);
     if (this.shadow) this.shadow.draw(ctx);
@@ -1950,6 +1958,8 @@ class Game {
     }
     this.drawHandRipple(ctx);
     this.popo.draw(ctx);
+    this.drawBucketFish(ctx);
+    this.drawConfetti(ctx);
     this.drawHookRing(ctx);
     this.drawMark(ctx);
     this.drawRaftWater(ctx);
@@ -1962,6 +1972,207 @@ class Game {
     if (this.titleFade > 0) this.drawTitle(ctx, this.titleFade);
     this.drawCurtain();
     this.ui.syncHits(state.fish);
+  }
+
+  // --- little fun: bubble confetti, curious taps, the fish in the bucket, a penguin -----------------
+  updateFun(dt) {
+    for (const c of this.confetti) {
+      c.life += dt / 2.2;
+      c.vx *= 1 - Math.min(1, dt * 1.8);
+      c.vy = c.vy * (1 - Math.min(1, dt * 1.8)) - 45 * dt;
+      c.x += (c.vx + Math.sin(c.life * 9 + c.wob) * 18) * dt;
+      c.y += c.vy * dt;
+    }
+    if (this.confetti.length) this.confetti = this.confetti.filter((c) => c.life < 1);
+    for (let i = 0; i < this.plantWiggle.length; i += 1) this.plantWiggle[i] = Math.max(0, this.plantWiggle[i] - dt / 1.6);
+    const b = this.bucketFish;
+    if (b && (b.t += dt) > (b.mode === 'peek' ? 1.6 : 1.2)) this.bucketFish = null;
+    const p = this.penguin;
+    if (p && state.phase !== PHASE.INTRO) {
+      if (p.wait > 0) {
+        p.wait -= dt;
+        if (p.wait <= 0) this.audio.play('whee');
+      } else if ((p.t += dt) > PENGUIN.cross) {
+        this.penguin = null; // once a level
+      }
+    }
+  }
+
+  // Bubble confetti: bright bubbles bursting up and drifting away (a three-catch streak).
+  confettiFrom(x, y, count = 28) {
+    const colours = ['#ff7aa8', '#ffd166', '#7ee0ff', '#9cf28a', '#c9a7ff', '#ffa35c'];
+    for (let i = 0; i < (this.fx.reduced ? 8 : count); i += 1) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4;
+      const v = 170 + Math.random() * 260;
+      this.confetti.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: 5 + Math.random() * 8, colour: colours[i % colours.length], life: 0, wob: Math.random() * TAU });
+    }
+  }
+
+  drawConfetti(ctx) {
+    for (const c of this.confetti) {
+      const pop = c.life > 0.9 ? 1 + (c.life - 0.9) * 4 : 1;
+      const fade = c.life > 0.9 ? 1 - (c.life - 0.9) * 10 : 1;
+      const r = c.r * pop;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, fade);
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r, 0, TAU);
+      ctx.fillStyle = c.colour + '55';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = c.colour;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(c.x - r * 0.35, c.y - r * 0.35, r * 0.28, 0, TAU);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // Little surprises for curious taps: Swiftee twirls, a fish in the bucket peeks out and waves.
+  // Returns true when the tap was one of these (so it doesn't also skip a line or splash).
+  onCharacterTap(point) {
+    if (state.paused || state.phase === PHASE.INTRO || state.phase === PHASE.COMPLETE || this.iris) return false;
+    const bird = this.swiftee;
+    if (bird && !bird.spin && Math.abs(bird.lean) < 0.03) {
+      const y = bird.bobY();
+      if (point.x > bird.x - 90 && point.x < bird.x + 90 && point.y > y - 130 && point.y < y + 40) {
+        bird.twirl();
+        this.fx.sparkle(bird.x, y - 50, 8);
+        this.audio.play('chirp');
+        return true;
+      }
+    }
+    const rim = this.popo.bucketRim();
+    if (!this.popo.mishap && Math.abs(point.x - rim.x) < 42 && point.y > rim.y - 24 && point.y < rim.y + 60) {
+      const fish = state.collected[state.collected.length - 1];
+      if (fish && !this.bucketFish) {
+        this.bucketFish = { mode: 'peek', t: 0, fish };
+        this.audio.play('bloop');
+      } else {
+        this.audio.play('tick');
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // A tap on a seaweed sets it wiggling for a moment.
+  wiggleSeaweed(point) {
+    const plants = this.fx.plantsFor(PLACES[this.place].background);
+    let hit = false;
+    plants.slice(0, 8).forEach((p, i) => {
+      if (point.x > p.left && point.x < p.right && point.y > p.top - 10 && point.y < p.root) {
+        this.plantWiggle[i] = 1;
+        hit = true;
+      }
+    });
+    if (hit) this.audio.play('wiggle');
+  }
+
+  // The last fish caught, in the bucket: peeking out to wiggle hello when the bucket is tapped,
+  // or (the end of a level) hopping right out with a flip and dropping back in.
+  drawBucketFish(ctx) {
+    const b = this.bucketFish;
+    if (!b) return;
+    const rim = this.popo.bucketRim();
+    const f = b.fish;
+    let x = rim.x;
+    let y;
+    let angle = 0;
+    let size = 0.3;
+    if (b.mode === 'peek') {
+      // nose first up out of the bucket, a happy waggle, and back down
+      const up = Math.min(1, b.t / 0.3);
+      const down = Math.max(0, (b.t - 1.25) / 0.3);
+      y = rim.y + 34 - 34 * ease.out(up) * (1 - ease.in(down));
+      angle = -Math.PI / 2 + (this.fx.reduced ? 0 : Math.sin(b.t * 11) * 0.22 * (1 - down));
+    } else {
+      // out like a dolphin, nose up, over the top and back in head first
+      const k = Math.min(1, b.t / 1.1);
+      y = rim.y + 20 - Math.sin(k * Math.PI) * 170;
+      x = rim.x + Math.sin(k * Math.PI) * 26;
+      angle = -Math.PI / 2 + k * Math.PI;
+      size = 0.36;
+    }
+    // inside the bucket until it rises past the rim
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, STAGE_W, rim.y + 4);
+    ctx.clip();
+    const keep = { x: f.x, y: f.y, scale: f.scale, gone: f.gone, offstage: f.offstage, dir: f.dir, pitch: f.pitch, frozen: f.frozen };
+    Object.assign(f, { x: 0, y: 0, scale: size, gone: false, offstage: false, dir: 1, pitch: 0, frozen: false });
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    f.draw(ctx);
+    Object.assign(f, keep);
+    ctx.restore();
+  }
+
+  // A penguin belly-slides along the far shore, small with distance, puffing snow behind it.
+  drawPenguin(ctx) {
+    const p = this.penguin;
+    if (!p || p.wait > 0) return;
+    const k = p.t / PENGUIN.cross;
+    const x = p.dir > 0 ? -60 + (STAGE_W + 120) * k : STAGE_W + 60 - (STAGE_W + 120) * k;
+    const hop = k < 0.06 ? Math.sin((k / 0.06) * Math.PI) * 10 : 0; // a little run-up hop, then down on its belly
+    const y = PENGUIN.y - hop;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(p.dir * 1.35, 1.35);
+    for (let i = 1; i <= 4; i += 1) { // snow puffs behind
+      const a = 0.5 - i * 0.1;
+      ctx.fillStyle = `rgba(255, 255, 255, ${a})`;
+      ctx.beginPath();
+      ctx.arc(-16 - i * 8, -2 - (i % 2) * 3 + Math.sin(this.fx.t * 20 + i) * 1.5, 3 + i * 0.6, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(20, 40, 70, 0.25)'; // its shadow on the snow
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 18, 2.5, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#1d2433'; // body, lying flat
+    ctx.beginPath();
+    ctx.ellipse(0, -6, 17, 7, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#f4f7fb'; // white belly underneath
+    ctx.beginPath();
+    ctx.ellipse(1, -3, 14, 4, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#1d2433'; // head, looking ahead
+    ctx.beginPath();
+    ctx.arc(16, -9, 6, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(18, -9, 3, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#10141c';
+    ctx.beginPath();
+    ctx.arc(19, -9.5, 1.2, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#ff9a2e'; // beak and feet
+    ctx.beginPath();
+    ctx.moveTo(21, -9);
+    ctx.lineTo(27, -7.5);
+    ctx.lineTo(21, -6.5);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(-18, -4, 4, 2, 0.3, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#1d2433'; // flippers out like wings, flapping with glee
+    const flap = Math.sin(this.fx.t * 14) * 0.35;
+    for (const side of [-1, 1]) {
+      ctx.save();
+      ctx.translate(2, -7);
+      ctx.rotate(side * (0.5 + flap));
+      ctx.beginPath();
+      ctx.ellipse(-7, 0, 8, 2.2, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
   }
 
   // --- the big catch at the end, and the end card ------------------------------------------------
@@ -2190,6 +2401,10 @@ class Game {
     this.flash = 0;
     this.geyser = null;
     this.spray = [];
+    this.confetti = [];
+    this.bucketFish = null;
+    this.penguin = null;
+    this.plantWiggle = new Array(8).fill(0);
     this.panScene(0, 0);
   }
 
