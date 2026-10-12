@@ -94,7 +94,7 @@ with sync_playwright() as p:
         assert not page.locator('#speech').is_visible()
         page.evaluate(BOOT)
         page.evaluate('popoDebug.game.onFishTap(right())')
-        page.evaluate('step(3700)')
+        page.evaluate('step(4600)')  # cast, reel in, swing over Popo into the bucket
         assert page.evaluate('popoDebug.state.collected.length===1'), 'Correct catch regression'
         assert not errors,errors
         results.append({'viewport':name,'fps':fps,**result,'errors':errors})

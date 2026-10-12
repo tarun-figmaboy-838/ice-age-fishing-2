@@ -6,7 +6,7 @@ const $ = (id) => document.getElementById(id);
 class UI {
   constructor() {
     this.el = {
-      hud: $('hud'), hits: $('hits'), hand: $('hand'), start: $('screen-start'), loading: $('loading'), play: $('btn-play'),
+      hud: $('hud'), hits: $('hits'), hand: $('hand'), start: $('screen-start'), loading: $('loading'), loadingText: $('loading-text'), retry: $('btn-retry'), play: $('btn-play'),
       instruction: $('instruction'), instructionText: $('instruction-text'), next: $('btn-next'),
       sound: $('btn-sound'), pause: $('btn-pause'),
       pauseOverlay: $('overlay-pause'), resume: $('btn-resume'), restart: $('btn-restart'),
@@ -26,6 +26,7 @@ class UI {
     this.el.resume.addEventListener('click', h('resume'));
     this.el.restart.addEventListener('click', h('restart'));
     this.el.next.addEventListener('click', h('next'));
+    this.el.retry.addEventListener('click', () => location.reload());
   }
 
   on(name, fn) {
@@ -96,7 +97,7 @@ class UI {
     const b = this.speechBox || { w: 0, h: 0, em: 0 };
     const width = this.el.hits.clientWidth;
     const left = Math.min(x * this.scale, width - b.w + 0.6 * b.em - 4);
-    const top = Math.max(y * this.scale, b.h + 4);
+    const top = Math.max(y * this.scale, b.h + 14); // clear of the top edge, even as it pops
     this.el.speech.style.left = `${left.toFixed(1)}px`;
     this.el.speech.style.top = `${top.toFixed(1)}px`;
   }
@@ -119,10 +120,35 @@ class UI {
     return { x: (clientX - r.left) / this.scale, y: (clientY - r.top) / this.scale };
   }
 
-  setLoading(text) {
-    this.el.loading.textContent = text;
-    this.el.loading.hidden = !text;
-    this.el.play.disabled = Boolean(text);
+  // The loading bar, from 0 to 1.
+  setLoading(k) {
+    const pct = Math.round(Math.max(0, Math.min(1, k)) * 100);
+    this.el.loading.style.setProperty('--p', pct / 100);
+    this.el.loading.setAttribute('aria-valuenow', pct);
+  }
+
+  // The banner is up: Play can be pressed, and the bar moves down out of its way.
+  showTitle() {
+    this.el.start.classList.add('titled');
+    this.el.start.parentElement.classList.remove('booting');
+    this.el.play.disabled = false;
+  }
+
+  // Play was pressed before everything arrived.
+  waitForLoad() {
+    this.el.loading.classList.add('waiting');
+    this.el.loadingText.textContent = 'Get ready…';
+  }
+
+  loaded() {
+    this.el.loading.classList.add('done');
+  }
+
+  loadFailed() {
+    this.el.loading.classList.add('failed');
+    this.el.loadingText.textContent = 'Could not load the game.';
+    this.el.retry.hidden = false;
+    this.el.play.disabled = true;
   }
 
   hideStart() {

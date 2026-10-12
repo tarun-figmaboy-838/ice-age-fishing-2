@@ -57,11 +57,36 @@ class Swimmer {
     this.dart = null;
   }
 
-  enter(area) {
+  // The depth with the most room around x (from fish within `reach` of it), and that room.
+  clearDepth(area, others, x, reach) {
+    const near = others.filter((o) => o !== this && !o.gone && !o.offstage && Math.abs(o.x - x) < (o.w + this.w) / 2 + reach);
+    const top = area.top + this.h / 2;
+    const span = Math.max(0, area.bottom - area.top - this.h);
+    let best = { y: top + Math.random() * span, room: Infinity };
+    if (!near.length) return best;
+    best.room = -Infinity;
+    for (let i = 0; i <= 10; i += 1) {
+      const y = top + (span * i) / 10;
+      const room = Math.min(...near.map((o) => Math.abs(o.y - y) - (o.h + this.h) / 2)) + Math.random() * 6;
+      if (room > best.room) best = { y, room };
+    }
+    return best;
+  }
+
+  // Back into view on the side it left from (a first visit picks a side), at the clearest depth
+  // near that edge; while that edge is crowded it waits a moment longer out of view.
+  enter(area, others = []) {
+    const dir = this.exitSide ? -this.exitSide : Math.random() < 0.5 ? 1 : -1;
+    const x = dir > 0 ? -this.w / 2 - 12 : STAGE_W + this.w / 2 + 12;
+    const lane = this.clearDepth(area, others, x, 320);
+    if (lane.room < 0) {
+      this.away = 0.4;
+      return;
+    }
     this.offstage = false;
-    this.dir = Math.random() < 0.5 ? 1 : -1;
-    this.x = this.dir > 0 ? -this.w / 2 - 12 : STAGE_W + this.w / 2 + 12;
-    this.baseY = area.top + this.h / 2 + Math.random() * (area.bottom - area.top - this.h);
+    this.dir = dir;
+    this.x = x;
+    this.baseY = lane.y;
     this.targetY = this.baseY;
     this.y = this.baseY;
     this.lastY = this.y;
@@ -154,7 +179,7 @@ class Swimmer {
     }
     if (this.frozen) return;
     if (this.offstage) {
-      if (!this.escaping && (this.away -= dt) <= 0) this.enter(area);
+      if (!this.escaping && (this.away -= dt) <= 0) this.enter(area, others);
       return;
     }
     if (this.escaping) {
@@ -216,6 +241,7 @@ class Swimmer {
     if (this.trail > 0) this.trail -= dt;
     this.x += this.dir * this.speed * dt;
     if ((this.dir > 0 && this.x > STAGE_W + this.w / 2 + 14) || (this.dir < 0 && this.x < -this.w / 2 - 14)) {
+      this.exitSide = this.dir; // 1: left on the right, -1: on the left; it comes back that way
       this.goOffstage(0.8 + Math.random() * 2.2);
       return;
     }
@@ -224,26 +250,33 @@ class Swimmer {
     this.wanderIn -= dt;
     if (this.wanderIn <= 0) {
       this.wanderIn = 2.5 + Math.random() * 3.5;
-      this.targetY = area.top + this.h / 2 + Math.random() * (area.bottom - area.top - this.h);
+      const lane = this.clearDepth(area, others, this.x + this.dir * 200, 420);
+      if (lane.room > 0) this.targetY = lane.y; // only wander somewhere clear
     }
     this.baseY += (this.targetY - this.baseY) * Math.min(1, dt * 0.55);
     this.driftPhase += dt * this.driftFreq * TAU;
 
-    // keep clear of the other fish
+    // keep clear of the other fish. There's only room for two or three at different depths, so fish
+    // sharing a depth keep apart along it: one catching up follows at the other's pace, one meeting
+    // another head-on turns away in good time (never while still swimming into view), and two that
+    // touch ease apart in depth.
+    let pace = Infinity;
     for (const o of others) {
       if (o === this || o.gone || o.offstage) continue;
       const dx = o.x - this.x;
-      const dy = o.baseY - this.baseY;
-      const minX = (this.w + o.w) * 0.7;
-      const minY = (this.h + o.h) * 0.85;
-      if (Math.abs(dx) < minX && Math.abs(dy) < minY) {
-        const push = (minY - Math.abs(dy)) * dt * 4;
-        const sign = dy >= 0 ? -1 : 1;
-        this.baseY += sign * push;
-        this.targetY += sign * push * 2;
-        if (Math.sign(dx) === this.dir && !this.turn && Math.abs(dx) < minX * 0.8) this.startTurn();
+      const dy = o.y - this.y;
+      if (Math.abs(dy) >= (this.h + o.h) / 2 + 16) continue;
+      const gap = Math.abs(dx) - (this.w + o.w) / 2;
+      if (gap < 30) {
+        const sign = dy > 0 || (dy === 0 && this.y < o.y) ? -1 : 1;
+        this.baseY += sign * Math.min(40, 30 - gap) * Math.min(1, dt * 4);
+        this.targetY = this.baseY;
       }
+      if (Math.sign(dx) !== this.dir || gap > 160) continue;
+      if (o.dir === this.dir && !o.turn && !o.frozen) pace = Math.min(pace, o.speed * (gap < 60 ? 0.7 : 0.97));
+      else if (!this.turn && !this.offEdge()) this.startTurn();
     }
+    if (pace < this.speed) this.speed = pace;
     const minY = area.top + this.h / 2;
     const maxY = area.bottom - this.h / 2;
     this.baseY = Math.min(maxY, Math.max(minY, this.baseY));
@@ -322,21 +355,6 @@ class Fish extends Swimmer {
   }
 }
 
-// Spread the fish across the swim area so none start on top of each other.
-// A challenge's fish all start out of view and swim in from the left or right, one after
-// another, each a slightly different size so repeated shapes don't look cloned.
-function spawnFish(keys, area, sizeScale = 1) {
-  const order = keys.map((k, i) => i).sort(() => Math.random() - 0.5);
-  let at = 0;
-  const delays = [];
-  for (let i = 0; i < keys.length; i += 1) { delays[order[i]] = at; at += 0.25 + Math.random() * 0.45; }
-  return keys.map((key, i) => {
-    const fish = new Fish(key, -999, area.top, 1, sizeScale * (0.92 + Math.random() * 0.16));
-    fish.goOffstage(delays[i]);
-    return fish;
-  });
-}
-
 // --- the trapezium levels' fish ------------------------------------------------------------
 
 // Stage pixels per unit of body length. The colours come from the uploaded fish sheet
@@ -359,7 +377,7 @@ const LABEL = { min: 17, max: 20 };
 
 function shade(hex, k) {
   const n = parseInt(hex.slice(1), 16);
-  const c = [n >> 16, (n >> 8) & 255, n & 255].map((v) => Math.round(v * k));
+  const c = [n >> 16, (n >> 8) & 255, n & 255].map((v) => Math.min(255, Math.round(v * k)));
   return `rgb(${c.join(', ')})`;
 }
 
@@ -492,7 +510,8 @@ function placeFace(px, box, eyeR, spots) {
 // smaller one underneath, each attached where the outline actually is and moved back clear of
 // any parallel arrows on the top or bottom side.
 function placeFins(px, box, arrows) {
-  const h = box.bottom - box.top;
+  // fins keep a steady size from fish to fish (a tall body doesn't grow a huge tail)
+  const h = Math.max(80, Math.min(100, box.bottom - box.top));
   const w = box.right - box.left;
   const mid = (box.top + box.bottom) / 2;
   const top = (x) => Math.min(...crossings(px, 'x', x));
@@ -507,7 +526,7 @@ function placeFins(px, box, arrows) {
   const dorsalX = clearOf(box.left + w * 0.4, h * 0.26, true);
   const ventralX = clearOf(box.left + w * 0.52, h * 0.2, false);
   return {
-    tail: { root: [tailX + 6, mid], length: h * 0.52, spread: h * 0.4 },
+    tail: { root: [tailX + 12, mid], length: h * 0.46, spread: h * 0.34 },
     dorsal: { a: [dorsalX - h * 0.26, top(dorsalX - h * 0.26) + 7], b: [dorsalX + h * 0.2, top(dorsalX + h * 0.2) + 7], tip: [dorsalX - h * 0.34, top(dorsalX) - h * 0.4] },
     ventral: { a: [ventralX - h * 0.2, bottom(ventralX - h * 0.2) - 6], b: [ventralX + h * 0.12, bottom(ventralX + h * 0.12) - 6], tip: [ventralX - h * 0.28, bottom(ventralX) + h * 0.32] },
   };
@@ -616,8 +635,14 @@ class ShapeFish extends Swimmer {
     return true;
   }
 
+  // Lights up the fish's markings for a moment: a soft glow pulsing behind each angle and its number.
+  showMarks() {
+    this.shine = { t: 0 };
+  }
+
   update(dt, area, others) {
     if (this.reveal) this.reveal.t += dt;
+    if (this.shine && (this.shine.t += dt) > 2.4) this.shine = null;
     this.wag += dt * (2.4 + (this.frozen ? 0 : this.speed / 24) + (this.surprised > 0 ? 6 : 0));
     if (this.surprised > 0) this.surprised -= dt;
     // a blink every few seconds, quick enough not to hide the eye for long
@@ -670,12 +695,10 @@ class ShapeFish extends Swimmer {
     const w = this.wag;
     const { fin, body } = this.colour;
     ctx.save();
-    ctx.shadowColor = fin;
-    ctx.shadowBlur = 5;
     const paint = (root, tip) => {
       const g = ctx.createLinearGradient(root[0], root[1], tip[0], tip[1]);
       g.addColorStop(0, fin);
-      g.addColorStop(1, 'rgba(255, 255, 255, 0.75)');
+      g.addColorStop(1, shade(fin, 1.04).replace('rgb(', 'rgba(').replace(')', ', 0.7)'));
       ctx.globalAlpha *= 0.92;
       ctx.fillStyle = g;
       ctx.fill();
@@ -937,6 +960,20 @@ class ShapeFish extends Swimmer {
       strokes.push(corner);
     }
     const edge = shade(this.colour.body, 0.45);
+    if (this.shine) {
+      // a pulsing glow behind each marked angle while it's being pointed out
+      const k = Math.min(1, this.shine.t / 0.25) * Math.min(1, (2.4 - this.shine.t) / 0.4);
+      const pulse = 0.55 + 0.45 * Math.sin(this.shine.t * 9);
+      for (const { at, radius } of marks.arcs) {
+        const g = ctx.createRadialGradient(at[0], at[1], 2, at[0], at[1], radius * 2.4);
+        g.addColorStop(0, `rgba(255, 246, 200, ${(0.95 * k * pulse).toFixed(3)})`);
+        g.addColorStop(1, 'rgba(255, 246, 200, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(at[0], at[1], radius * 2.4, 0, TAU);
+        ctx.fill();
+      }
+    }
     for (const arc of marks.arcs) drawAngleArc(ctx, arc, edge);
     ctx.save();
     ctx.lineCap = 'round';
@@ -967,29 +1004,32 @@ class ShapeFish extends Swimmer {
     const font = ShapeFish.labelFont;
     const labels = this.marksFor(font).labels;
     if (!labels.length) return;
-    const size = font * this.scale * this.zoom;
+    // the numbers give a little bounce while the marks are being pointed out
+    const bounce = this.shine && !this.reduced ? 1 + 0.22 * Math.max(0, Math.sin(Math.min(1, this.shine.t / 0.5) * Math.PI)) : 1;
+    const size = font * this.scale * this.zoom * bounce;
     ctx.save();
     ctx.globalAlpha = this.alpha;
     const edge = shade(this.colour.body, 0.45);
     for (const label of labels) {
       const [x, y] = this.toStage(label.at);
-      drawPrinted(ctx, label, x, y, size * 1.08, edge);
+      if (label.angle === undefined) {
+        drawPrinted(ctx, label, x, y, size * 1.08, edge);
+        continue;
+      }
+      // a length runs along its leg, turned with the fish (mirrored or tilted) but never upside down
+      const [ex, ey] = this.toStage([label.at[0] + Math.cos(label.angle) * 10, label.at[1] + Math.sin(label.angle) * 10]);
+      let angle = Math.atan2(ey - y, ex - x);
+      if (angle > Math.PI / 2 + 1e-6) angle -= Math.PI;
+      else if (angle < -Math.PI / 2 - 1e-6) angle += Math.PI;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      drawPrinted(ctx, label, 0, 0, size * 1.08, edge);
+      ctx.restore();
     }
     ctx.restore();
   }
 
-  // A small copy for the basket at the end: body, tail and fins, no markings.
-  drawMini(ctx, x, y, width, tilt, flip) {
-    const k = width / this.frame.w;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(tilt);
-    ctx.scale(flip ? -k : k, k);
-    ctx.translate(this.offset[0], this.offset[1]);
-    this.drawFins(ctx);
-    this.paintBody(ctx);
-    ctx.restore();
-  }
 }
 
 ShapeFish.LABEL = LABEL;
@@ -1115,5 +1155,5 @@ function refreshShadows(current, count, area) {
   return [...current.filter((s) => s.leaving && !s.gone), ...staying, ...fresh].sort((a, b) => b.depth - a.depth);
 }
 
-Object.assign(PopoGame, { FISH_SCALE, Fish, ShapeFish, ShadowFish, PALETTE, drawLabel, spawnFish, refreshShadows });
+Object.assign(PopoGame, { FISH_SCALE, Fish, ShapeFish, ShadowFish, PALETTE, drawLabel, refreshShadows });
 })(window.PopoGame = window.PopoGame || {});

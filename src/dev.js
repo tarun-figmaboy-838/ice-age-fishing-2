@@ -4,7 +4,7 @@
 // Number keys 1–9 and 0 press the buttons in order; ` folds the panel away.
 if (new URLSearchParams(location.search).get('dev') !== '1') return;
 
-const { state, PHASE, LEVELS, FISH, ShapeFish, PALETTE, finishLevel } = PopoGame;
+const { state, PHASE, LEVELS, finishLevel } = PopoGame;
 
 function game() {
   return window.popoDebug && window.popoDebug.game;
@@ -37,18 +37,11 @@ function tapFish(right) {
   if (fish) g.onFishTap(fish, null);
 }
 
-// A full game's catch, for the basket at the end: the first fish to catch of each level.
-function fullCatch() {
-  return LEVELS.flatMap((lvl, i) => FISH.filter((f) => f.level === i + 1 && f.correct).slice(0, lvl.catches)
-    .map((spec, k) => new ShapeFish(spec, lvl, { colour: PALETTE[(i * 3 + k) % PALETTE.length] })));
-}
-
 // As if level `index`'s last fish had just landed.
 function finish(index) {
   const g = game();
   level(index);
   state.levelCaught = LEVELS[index].catches;
-  if (index === LEVELS.length - 1) state.collected = fullCatch();
   finishLevel(g);
 }
 

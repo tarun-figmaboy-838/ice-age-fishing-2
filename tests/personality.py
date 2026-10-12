@@ -17,8 +17,8 @@ with sync_playwright() as p:
         page.wait_for_function('window.PopoGame.assets.popoPersonality && window.PopoGame.assets.swifteePersonality')
         page.evaluate(BOOT)
         # Every emotion advances on the game clock and leaves the raft anchor in place.
-        for clip in ['catch','dance','wobble','wet']:
-            page.evaluate('clip=>{const p=popoDebug.game.popo;qa.anchor={...p.anchor};p.act(clip);}',clip)
+        for clip in ['idle','catch','dance','wobble','wet']:
+            page.evaluate('clip=>{const p=popoDebug.game.popo;popoDebug.state.idleTime=0;qa.anchor={...p.anchor};p.act(clip);}',clip)
             page.evaluate('step(350)')
             before=page.evaluate('popoDebug.game.popo.acting.t')
             page.evaluate('popoDebug.state.paused=true');page.evaluate('step(500)')

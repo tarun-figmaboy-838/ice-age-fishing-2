@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { trapezium, angled, based, kite, arrowhead, orient } = PopoGame.geometry;
+const { trapezium, angled, kite, arrowhead, orient } = PopoGame.geometry;
 
 // The trapezium activity: five levels at one frozen lake, their fish, and the story lines.
 
@@ -23,8 +23,16 @@ function getShape(key) {
   return SHAPES[key];
 }
 
-// Every level plays at Quadrilateral Waters, where Popo first saw a trapezium fish.
-const SCENE = { name: 'Quadrilateral Waters', background: 3, waterline: 388 };
+// Popo rows round the frozen lake, a new place for every level: Triangle Bay, Pentagon Cove,
+// Hexagon Pass, Quadrilateral Waters (where he first saw a trapezium fish), and the first bay
+// seen from across the lake. background: the painting (src/background-data.js).
+const PLACES = [
+  { name: 'Triangle Bay', background: 0, waterline: 388 },
+  { name: 'Pentagon Cove', background: 1, waterline: 390 },
+  { name: 'Hexagon Pass', background: 2, waterline: 387 },
+  { name: 'Quadrilateral Waters', background: 3, waterline: 388 },
+  { name: 'Far Shore', background: 4, waterline: 388 },
+];
 
 // Fish bodies, in units (see src/geometry.js). `kind` is the classification the body must
 // have (tests/geometry.py checks it) and `correct` whether it is a catch in its level. Level 5
@@ -34,7 +42,7 @@ const FISH = [
   // parallel sides
   { id: 'L1-a', level: 1, kind: 'trapezium', correct: true, pattern: 'dots', body: trapezium({ bottom: 11, height: 4.6, left: 2.6, right: 3.4 }) },
   { id: 'L1-b', level: 1, kind: 'trapezium', correct: true, pattern: 'waves', body: orient(trapezium({ bottom: 10.5, height: 4.8, left: 2.4, right: 2.4 }), { flipY: true }) },
-  { id: 'L1-c', level: 1, kind: 'trapezium', correct: true, pattern: 'stripes', body: trapezium({ bottom: 11.5, height: 4.4, left: 0, right: 3.6 }) },
+  { id: 'L1-c', level: 1, kind: 'trapezium', correct: true, pattern: 'stripes', body: trapezium({ bottom: 11.5, height: 4.4, left: 1.2, right: 3.6 }) },
   { id: 'L1-d', level: 1, kind: 'trapezium', correct: true, pattern: 'diamonds', body: orient(trapezium({ bottom: 10.5, height: 4.8, left: 4, right: 1.6 }), { turn: -8 }) },
   { id: 'L1-e', level: 1, kind: 'trapezium', correct: true, pattern: 'hearts', body: orient(trapezium({ bottom: 12, height: 4.2, left: 3, right: 4 }), { turn: 7, flipY: true }) },
   { id: 'L1-f', level: 1, kind: 'quadrilateral', correct: false, pattern: 'dots', body: [[0, 0], [11, 1.6], [8.5, 4.6], [1.5, 5.6]] },
@@ -43,15 +51,16 @@ const FISH = [
   { id: 'L1-i', level: 1, kind: 'kite', correct: false, pattern: 'diamonds', body: kite({ back: 3.6, front: 6.4, half: 2.7 }) },
   { id: 'L1-j', level: 1, kind: 'arrowhead', correct: false, pattern: 'hearts', body: arrowhead({ length: 10, notch: 3.4, half: 3.6 }) },
 
-  // Level 2: non-right scalene trapeziums among isosceles and right trapeziums; whole-unit legs
+  // Level 2: non-right scalene trapeziums among isosceles ones (equal legs; no right angles, whose
+  // unequal legs would look scalene too); whole-unit legs
   { id: 'L2-a', level: 2, kind: 'scalene', correct: true, pattern: 'dots', body: trapezium({ bottom: 12, height: 4.4, legs: [5, 7] }) },
   { id: 'L2-b', level: 2, kind: 'scalene', correct: true, pattern: 'waves', body: trapezium({ bottom: 13.5, height: 5, legs: [6, 8] }) },
   { id: 'L2-c', level: 2, kind: 'scalene', correct: true, pattern: 'stripes', body: trapezium({ bottom: 13, height: 4.8, legs: [7, 5] }) },
   { id: 'L2-d', level: 2, kind: 'scalene', correct: true, pattern: 'diamonds', body: trapezium({ bottom: 13, height: 4.6, legs: [5, 8] }) },
   { id: 'L2-e', level: 2, kind: 'isosceles', correct: false, pattern: 'hearts', body: trapezium({ bottom: 12.5, height: 4.6, legs: [5, 5] }) },
   { id: 'L2-f', level: 2, kind: 'isosceles', correct: false, pattern: 'dots', body: trapezium({ bottom: 13, height: 4.6, legs: [6, 6] }) },
-  { id: 'L2-g', level: 2, kind: 'right', correct: false, pattern: 'waves', body: trapezium({ bottom: 11.5, height: 5, legs: [5, 6] }) },
-  { id: 'L2-h', level: 2, kind: 'right', correct: false, pattern: 'stripes', body: trapezium({ bottom: 12.5, height: 5, legs: [7, 5] }) },
+  { id: 'L2-g', level: 2, kind: 'isosceles', correct: false, pattern: 'waves', body: trapezium({ bottom: 12, height: 4.8, legs: [6, 6] }) },
+  { id: 'L2-h', level: 2, kind: 'isosceles', correct: false, pattern: 'stripes', body: orient(trapezium({ bottom: 11.5, height: 4.2, legs: [5, 5] }), { flipY: true }) },
   // Level 3: isosceles trapeziums among look-alikes whose legs differ a little
   { id: 'L3-a', level: 3, kind: 'isosceles', correct: true, pattern: 'dots', body: trapezium({ bottom: 11, height: 4.6, left: 2.8, right: 2.8 }) },
   { id: 'L3-b', level: 3, kind: 'isosceles', correct: true, pattern: 'waves', body: orient(trapezium({ bottom: 10, height: 4.2, left: 2, right: 2 }), { flipY: true }) },
@@ -72,12 +81,11 @@ const FISH = [
   { id: 'L4-g', level: 4, kind: 'scalene', correct: false, pattern: 'waves', body: orient(trapezium({ bottom: 10.5, height: 4.8, left: 3.6, right: 2.2 }), { flipY: true }) },
   { id: 'L4-h', level: 4, kind: 'scalene', correct: false, pattern: 'stripes', body: trapezium({ bottom: 12, height: 4, left: 3, right: 4.4 }) },
 
-  // Level 5: the handoff's six fish. The trapeziums show ∠D and ∠A at the ends of leg DA; the
-  // distractors show the two angles at the ends of one side
+  // Level 5: the handoff's six fish, each showing ∠D and ∠A at the two ends of its left side DA
   { id: 'A', level: 5, kind: 'trapezium', correct: true, pattern: 'dots', corners: [0, 3], angles: [70, 110], body: angled({ bottom: 11, side: 5, angles: [70, 110, 60] }) },
   { id: 'B', level: 5, kind: 'quadrilateral', correct: false, pattern: 'waves', corners: [0, 3], angles: [80, 80], body: orient(angled({ bottom: 10, side: 5.5, angles: [80, 80, 55] }), { turn: 10 }) },
   { id: 'C', level: 5, kind: 'trapezium', correct: true, pattern: 'stripes', corners: [0, 3], angles: [65, 115], body: orient(angled({ bottom: 11, side: 5.2, angles: [65, 115, 72] }), { flipY: true }) },
-  { id: 'D', level: 5, kind: 'quadrilateral', correct: false, pattern: 'diamonds', corners: [0, 1], angles: [105, 95], body: based({ bottom: 9.5, angles: [105, 95], sides: [2.8, 5] }) },
+  { id: 'D', level: 5, kind: 'quadrilateral', correct: false, pattern: 'diamonds', corners: [0, 3], angles: [95, 105], body: angled({ bottom: 10.5, side: 4.6, angles: [95, 105, 38] }) },
   { id: 'E', level: 5, kind: 'trapezium', correct: true, pattern: 'hearts', corners: [0, 3], angles: [75, 105], body: angled({ bottom: 11, side: 5, angles: [75, 105, 56] }) },
   { id: 'F', level: 5, kind: 'trapezium', correct: true, pattern: 'waves', corners: [0, 3], angles: [80, 100], body: orient(angled({ bottom: 11.5, side: 4.8, angles: [80, 100, 54] }), { flipY: true }) },
 ];
@@ -85,28 +93,27 @@ const FISH = [
 // The angle recall before level 5: one trapezium, its left leg, and the angles at its two ends.
 const RECALL = { body: angled({ bottom: 10, side: 5, angles: [70, 110, 62] }), corners: [0, 3] };
 
-// school: fish swimming when the level starts; targets: catches among them; least: distractors
-// top the school up so it never drops below this. speed: cruising range (stage px/s).
-// marks: see layoutMarks in src/geometry.js. sizes: random size range ([1, 1] keeps one scale,
-// so the length labels compare across fish). right: Popo's beats after a catch; hint: shown after a
+// place: where on the lake it plays (PLACES). school: fish swimming when the level starts;
+// targets: catches among them; least: distractors top the school up so it never drops below this.
+// speed: cruising range (stage px/s). marks: see layoutMarks in src/geometry.js. sizes: random size
+// range ([1, 1] keeps one scale, so the length labels compare across fish). hint: shown after a
 // wrong catch; oops: Popo's beats as he climbs back aboard (instead of "Whoopsie Doopsie!").
-// The wording is the handoff's (flow table, feedback examples and storyboard).
+// The instructions and hints are the handoff's.
 const LEVELS = [
-  { instruction: 'Catch all the *trapeziums*!', catches: 3,
+  { place: 0, instruction: 'Catch all the *trapeziums*!', catches: 3,
     school: 4, targets: 2, least: 3, speed: [34, 46], sizes: [0.9, 1.08], marks: ['parallel'],
-    right: () => ['*Yes!*', 'One pair of *parallel* sides!'], hint: 'Look for *parallel* sides!' },
-  { instruction: 'Catch the *scalene* trapeziums!', catches: 3,
+    hint: 'Look for *parallel* sides!' },
+  { place: 1, instruction: 'Catch the *scalene* trapeziums!', catches: 3,
     school: 4, targets: 2, least: 3, speed: [40, 52], sizes: [1, 1], marks: ['parallel', 'legs'],
-    right: () => 'The legs have *different* lengths!', hint: 'Check the *leg* lengths!' },
-  { instruction: 'Catch the *isosceles* trapeziums!', catches: 3,
+    hint: 'Check the *leg* lengths!' },
+  { place: 2, instruction: 'Catch the *isosceles* trapeziums!', catches: 3,
     school: 4, targets: 2, least: 4, speed: [44, 58], sizes: [0.96, 1.04], marks: ['parallel', 'ticks'],
-    right: () => 'Both legs are *equal!*', hint: 'Are the legs *equal?*' },
-  { instruction: 'Catch the trapeziums with *two right angles*!', catches: 3,
+    hint: 'Are the legs *equal?*' },
+  { place: 3, instruction: 'Catch the right angle *trapeziums*!', catches: 3,
     school: 5, targets: 2, least: 4, speed: [44, 58], sizes: [0.96, 1.04], marks: ['parallel', 'right'],
-    right: () => 'Two *right* angles!', hint: 'Look for two *right* angles!' },
-  { instruction: 'Catch all the *trapeziums*!', catches: 4,
+    hint: 'Look for two *right* angles!' },
+  { place: 4, instruction: 'Catch all the *trapeziums*!', catches: 4,
     school: 5, targets: 3, least: 4, speed: [44, 58], sizes: [1, 1], marks: ['angles'], observe: true,
-    right: ([a, b]) => ['*Yes!*', `${a}° + ${b}° = *180°!*`, 'That means a pair of *parallel* sides!'],
     hint: 'Add the marked *angles!*', oops: ['Not a *trapezium.*', "These angles don't add up to *180°!*", 'Try *again!*'] },
 ];
 
@@ -122,15 +129,22 @@ const STORY = {
     { who: 'swiftee', text: 'Use the fishing rod to *aim*…' },
     { who: 'swiftee', text: '…and drop the hook on the *correct* fish.' },
   ],
-  // the recall card follows these words: it opens on "Remember,", the leg and its angles come on
-  // "leg", and the two angles snap into a straight line on "180°!"
+  // the recall card follows these words: it opens and draws its trapezium on "Look!", the parallel
+  // sides light up on "parallel!", the leg and its angles come on "leg", the two angles snap into a
+  // straight line on "180°!", and a little celebration on "Yay!"
   recall: [
-    { who: 'swiftee', text: '*Remember,*', cue: [{ word: 0, do: 'recallCard' }, { word: 0, do: 'twirl' }] },
+    { who: 'swiftee', text: 'Look! These two sides are *parallel!*', cue: [{ word: 0, do: 'recallCard' }, { word: 5, do: 'recallParallel' }] },
+    { who: 'swiftee', text: '*Remember,*' },
     { who: 'swiftee', text: 'angles on the same *leg* of a trapezium…', cue: { word: 4, do: 'recallLeg' } },
-    { who: 'swiftee', text: 'add up to *180°!*', cue: [{ word: 3, do: 'recallSum' }, { word: 3, do: 'twirl' }] },
+    { who: 'swiftee', text: 'add up to *180°!*', cue: { word: 3, do: 'recallSum' } },
+    { who: 'swiftee', text: 'Yay! Shape *detective!*', cue: { word: 0, do: 'recallCheer' } },
   ],
-  observe: [{ who: 'swiftee', text: 'Look at the marked *angles!*' }],
-  observeStep: 'Step 1: *Observe* (2 seconds)',
+  observe: [{ who: 'swiftee', text: 'Look at the marked *angles!*', cue: { word: 4, do: 'showAngles' } }],
+  // after a right catch Popo says these in turn
+  right: [
+    { who: 'popo', text: '*Great* catch!', cue: { word: 0, do: 'hop' } },
+    { who: 'popo', text: 'Keep *going!*', cue: { word: 1, do: 'hop' } },
+  ],
   wrong: { who: 'popo', text: 'Whoopsie Doopsie!' },
   wow: [
     { who: 'popo', text: '*Wow!*', cue: { word: 0, do: 'exclaim' } },
@@ -146,5 +160,5 @@ const STORY = {
   laughs: [{ who: 'popo', text: 'Ha ha *ha!*' }, { who: 'swiftee', text: 'Hee hee *hee!*' }],
 };
 
-Object.assign(PopoGame, { SHAPES, SCENE, FISH, RECALL, LEVELS, STORY, getShape });
+Object.assign(PopoGame, { SHAPES, PLACES, FISH, RECALL, LEVELS, STORY, getShape });
 })(window.PopoGame = window.PopoGame || {});

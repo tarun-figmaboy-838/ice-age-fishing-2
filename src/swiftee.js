@@ -12,6 +12,7 @@ class Swiftee {
     this.x = x;
     this.y = y;
     this.dir = -1; // the art faces right; Swiftee arrives from the right, facing Popo
+    this.faceViewer = false; // the opening addresses the player with the frontal flight atlas
     this.time = 0;
     this.beat = 0; // wing-beat phase, in frames; the rate eases down as Swiftee settles
     this.lean = 0;
@@ -29,6 +30,7 @@ class Swiftee {
 
   // a quick loop-de-loop on the stressed word
   twirl() {
+    if (this.faceViewer) { this.hop(); return; }
     this.spin = { t: 0 };
   }
 
@@ -46,7 +48,8 @@ class Swiftee {
     const beat = Math.floor(this.beat);
     if (beat !== this.lastBeat) {
       this.lastBeat = beat;
-      if (BEAT[beat % BEAT.length] === 2 && this.onDownstroke) this.onDownstroke();
+      const downstroke = this.faceViewer ? beat % 8 === 4 : BEAT[beat % BEAT.length] === 2;
+      if (downstroke && this.onDownstroke) this.onDownstroke();
     }
     if (this.spin) {
       this.spin.t += dt / 0.55;
@@ -80,7 +83,27 @@ class Swiftee {
     return this.reduced ? 0 : [12, 0, 14, 0][Math.floor(this.beat / 2) % 4];
   }
 
+  frontFrame() {
+    const beat = this.reduced ? 2 : Math.floor(this.beat) % 8;
+    // Four open-beak drawings share the up/level/down/level wing phases.
+    return this.speaking && Math.floor(this.time * 9) % 3 !== 0 ? 8 + Math.floor(beat / 2) : beat;
+  }
+
+  drawFront(ctx) {
+    const data = PopoGame.PERSONALITY_DATA['swiftee-front'];
+    const frame = this.frontFrame();
+    const [sx, sy, sw, sh] = data.frames[frame].box;
+    const k = 178 / data.frames[0].height;
+    ctx.save();ctx.translate(this.x, this.bobY() + 45);
+    // Gentle banking preserves eye contact; do not mirror or turn toward Popo.
+    if (!this.reduced) ctx.rotate(Math.max(-.06, Math.min(.06, this.lean * .18)));
+    ctx.scale(k, k);
+    ctx.drawImage(assets.swifteeFront, sx, sy, sw, sh, -128, -236, 256, 256);
+    ctx.restore();
+  }
+
   draw(ctx) {
+    if (this.faceViewer && assets.swifteeFront) { this.drawFront(ctx); return; }
     const d = PopoGame.SWIFTEE_DATA;
     const img = assets.swiftee;
     if (!img || !d) return;

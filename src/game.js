@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, spawnFish, refreshShadows, ShapeFish, ShadowFish, Swiftee, PALETTE, drawLabel, SCENE, FISH, LEVELS, RECALL, STORY, geometry, Popo, correctCatch, wrongCatch, finishLevel, closeCurtain, opening, mouthOf, Cancelled, STAGE_W, STAGE_H, swimArea, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
+const { assets, preloadBackground, clock, ease, Effects, WaterScene, surfaceWave, PAN_OVERLAP, refreshShadows, ShapeFish, ShadowFish, PALETTE, drawLabel, PLACES, FISH, LEVELS, RECALL, STORY, geometry, Popo, correctCatch, wrongCatch, finishLevel, closeCurtain, opening, mouthOf, Cancelled, STAGE_W, STAGE_H, swimArea, raftAnchor, state, PHASE, resetProgress, newToken, isCurrent } = PopoGame;
 
 const HINT_DELAY = 4;
 const TAU = Math.PI * 2;
@@ -14,23 +14,14 @@ const shuffle = (list) => list.map((x) => [Math.random(), x]).sort((a, b) => a[0
 // its straight line go on it, and the colours of the two angle pieces.
 const RECALL_CARD = { x: 1050, y: 598, w: 560, h: 400, diagram: -92, line: 78, pieces: ['#ffb347', '#ff7aa8'] };
 
-// The leaps into the bucket at the end: seconds between fish, and each leap's length.
-const LEAP = { gap: 0.13, time: 0.75 };
-
 // The title banner: its water surface, sand line, the open water the decorative fish swim
 // in, where the hooked fish splashes, and sparkle points along the logo's snowy edges.
 const TITLE = {
   waterline: 610,
   seabed: 860,
   area: { left: 60, right: 1612, top: 680, bottom: 905 },
-  // the play button floats in the middle of the banner's water; five shape fish circle it,
-  // and a few more swim back and forth on the far left and right, clear of the orbit
+  // the play button floats in the banner's water
   play: { x: 836, y: 748, r: 108 },
-  orbit: { fish: ['triangle', 'octagon', 'pentagon', 'hexagon', 'circle'], rx: 270, ry: 92, speed: 0.55 },
-  sides: [
-    { fish: ['triangle-right', 'oval'], area: { left: 60, right: 500, top: 690, bottom: 900 } },
-    { fish: ['decagon', 'semicircle'], area: { left: 1172, right: 1612, top: 690, bottom: 900 } },
-  ],
   splash: { left: 760, right: 1010, y: 572 },
   twinkles: [[906, 118], [1062, 66], [1242, 58], [1424, 90], [1598, 160], [1556, 336], [958, 318]],
 };
@@ -66,8 +57,7 @@ class Game {
     this.water = new WaterScene(document.getElementById('water'));
     this.titleFx = new Effects();
     this.titleFx.setWaterline(TITLE.waterline);
-    this.titleFish = [];
-    this.playAnim = { hover: 0, hoverTarget: 0, press: 0, burst: 0, angle: 0, bubbleIn: 0.3 };
+    this.playAnim = { hover: 0, hoverTarget: 0, press: 0, burst: 0, bubbleIn: 0.3 };
     this.titleFade = 0;
     this.titleSplashIn = 0.8;
     this.raftRippleIn = 1;
@@ -85,12 +75,13 @@ class Game {
     this.surfaceColors = [];
     this.tutorialPending = false;
     this.learned = false;
-    this.waterline = SCENE.waterline;
+    this.place = LEVELS[0].place; // where on the lake Popo is (PLACES)
+    this.transition = null; // rowing on to the next place: { to, k }
+    this.waterline = PLACES[this.place].waterline;
     this.area = swimArea(this.waterline);
     this.decoys = [];
     this.recall = null;
     this.hookRing = null;
-    this.basket = null;
     this.shadow = null; // the big shadow at the end
     this.trash = null; // ...which is an old boot
     this.iris = null;
@@ -108,12 +99,6 @@ class Game {
   // The world renders behind the start screen as soon as the art is ready.
   showIdleScene() {
     this.applyScene();
-    if (state.phase === PHASE.INTRO && !this.titleFish.length) {
-      const orbit = spawnFish(TITLE.orbit.fish, TITLE.sides[0].area, 0.46);
-      orbit.forEach((f, i) => { f.orbit = (i / orbit.length) * Math.PI * 2; });
-      const sides = TITLE.sides.flatMap((side) => spawnFish(side.fish, side.area, 0.46).map((f) => Object.assign(f, { zone: side.area })));
-      this.titleFish = [...orbit, ...sides];
-    }
     if (!this.running) {
       this.running = true;
       this.lastFrame = performance.now();
@@ -164,11 +149,11 @@ class Game {
     this.mark = null;
     this.recall = null;
     this.hookRing = null;
-    this.basket = null;
     this.shadow = null;
     this.trash = null;
     this.iris = null;
     this.ending = null;
+    this.spotlight = null;
     this.comicReset();
     this.tutorialPending = false;
     this.endLine();
@@ -180,6 +165,8 @@ class Game {
     this.ui.setInstruction('');
     this.ui.el.hud.inert = false;
     this.nextNudge = 3;
+    this.transition = null;
+    this.place = LEVELS[0].place;
     this.applyScene();
   }
 
@@ -202,8 +189,23 @@ class Game {
   }
 
   applyScene() {
-    this.setWaterline(SCENE.waterline);
-    this.fx.setLocation(SCENE.background);
+    const place = PLACES[this.place];
+    this.setWaterline(place.waterline);
+    this.fx.setLocation(place.background);
+    const next = LEVELS.find((level) => level.place > this.place);
+    if (next) preloadBackground(PLACES[next.place].background);
+  }
+
+  // Rowing on: the next place's painting is ready, then the row (sequences.js) moves `k` to 1.
+  async prepareTransition(to, token) {
+    await preloadBackground(PLACES[to].background);
+    if (isCurrent(token)) this.transition = { to, k: 0 };
+  }
+
+  finishTransition() {
+    this.place = this.transition.to;
+    this.transition = null;
+    this.applyScene();
   }
 
   setWaterline(y) {
@@ -222,6 +224,10 @@ class Game {
   // swimming in from either side one after another, in no particular order.
   startLevel(index) {
     state.level = index;
+    if (this.place !== LEVELS[index].place) {
+      this.place = LEVELS[index].place;
+      this.applyScene();
+    }
     state.levelCaught = 0;
     state.used = new Set();
     state.selectedFish = null;
@@ -408,6 +414,18 @@ class Game {
     this.fx.puff(fish.x + fish.dir * fish.w * 0.42 * fish.scale, fish.y + fish.h * 0.1 * fish.scale, fish.dir, count, big);
   }
 
+  // Fish near the line from a to b dart away from it (a hooked fish is reeled along it).
+  clearPath(a, b, except) {
+    const ab = [b.x - a.x, b.y - a.y];
+    const len2 = ab[0] * ab[0] + ab[1] * ab[1] || 1;
+    for (const f of state.fish) {
+      if (f === except || f.gone || f.offstage) continue;
+      const k = Math.max(0, Math.min(1, ((f.x - a.x) * ab[0] + (f.y - a.y) * ab[1]) / len2));
+      const near = { x: a.x + ab[0] * k, y: a.y + ab[1] * k };
+      if (Math.hypot(f.x - near.x, f.y - near.y) < (f.w + f.h) / 2) f.startle(near);
+    }
+  }
+
   // Splashes make nearby fish dart away; a catch makes the others wiggle and blow bubbles.
   startleAround(point, radius = 320, except = null) {
     for (const f of state.fish) {
@@ -477,9 +495,6 @@ class Game {
       return;
     }
     this.titleFx.puff(point.x, point.y, 0, 5, true);
-    for (const f of this.titleFish) {
-      if (Math.hypot(f.x - point.x, f.y - point.y) < 320) { f.wiggle(); f.puffs += 2; }
-    }
   }
 
   onPlayHover(on) {
@@ -493,12 +508,20 @@ class Game {
     this.playAnim.press = 1;
   }
 
-  // Play: the button pops, bubbles and sparkles burst out, the fish scatter, the game begins.
+  // Play: the button pops, bubbles and sparkles burst out, the game begins.
   pressPlay() {
     if (state.phase !== PHASE.INTRO || !assets.title) return;
     const { x, y, r } = TITLE.play;
-    this.audio.init();
+    this.audio.init(); // inside the tap, so phones allow sound
     this.audio.resume();
+    if (!assets.ready) {
+      // still loading: the button dips, and main.js presses it again once everything is in
+      this.playAnim.press = 1;
+      this.playQueued = true;
+      this.ui.waitForLoad();
+      return;
+    }
+    this.playQueued = false;
     this.playAnim.burst = 0.001;
     this.playAnim.press = 1;
     for (let i = 0; i < 10; i += 1) {
@@ -506,10 +529,6 @@ class Game {
       this.titleFx.puff(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.8, Math.cos(a), 2, true);
     }
     this.titleFx.sparkle(x, y - r * 0.4, 14);
-    for (const f of this.titleFish) {
-      if (f.zone) f.startle({ x, y });
-      else f.wiggle();
-    }
     this.audio.play('splashSmall');
     this.audio.play('cheer');
     this.start();
@@ -816,11 +835,17 @@ class Game {
       this.audio.play('hmm');
     } else if (name === 'recallCard') {
       this.showRecall();
-      this.audio.play('poof');
     } else if (name === 'recallLeg') {
       this.recallStep('leg');
     } else if (name === 'recallSum') {
       this.recallStep('sum');
+    } else if (name === 'recallParallel') {
+      this.recallStep('parallel');
+    } else if (name === 'recallCheer') {
+      this.recallStep('cheer');
+    } else if (name === 'showAngles') {
+      if (this.spotlight) this.spotlight.showMarks();
+      this.audio.play('boing');
     } else if (name === 'twirl' && this.swiftee) {
       if (!this.fx.reduced) this.swiftee.twirl();
       this.fx.sparkle(this.swiftee.x, this.swiftee.y - 40, 8);
@@ -831,7 +856,6 @@ class Game {
   updateStoryFx(dt) {
     if (this.recall) this.updateRecall(dt);
     if (this.hookRing) this.hookRing.t += dt;
-    if (this.basket) this.updateBasket(dt);
     if (this.shadow) this.shadow.update(dt, this.area);
     this.updateComic(dt);
     if (this.trash) this.updateTrash(dt);
@@ -937,7 +961,7 @@ class Game {
 
   // Average colour of the painted water just below the surface, for the water over the raft.
   surfaceColor() {
-    const index = SCENE.background;
+    const index = PLACES[this.place].background;
     if (this.surfaceColors[index]) return this.surfaceColors[index];
     const img = assets.backgrounds[index];
     if (!img) return null;
@@ -1014,7 +1038,7 @@ class Game {
     ctx.drawImage(c, x0, top);
   }
 
-  // Fish, bubbles and splashes for the title banner. Also runs while it fades out after Play.
+  // Bubbles and splashes for the title banner. Also runs while it fades out after Play.
   updateTitle(dt) {
     this.titleFx.update(dt);
     const pa = this.playAnim;
@@ -1027,35 +1051,6 @@ class Game {
       pa.bubbleIn = 0.28 + Math.random() * 0.3;
       this.titleFx.puff(px + (Math.random() - 0.5) * 150, py + 70, 0, 1);
     }
-    pa.angle += dt * TITLE.orbit.speed * (1 + pa.burst * 4);
-    const sideFish = this.titleFish.filter((f) => f.zone);
-    for (const f of this.titleFish) {
-      if (f.zone) {
-        f.update(dt, f.zone, sideFish);
-      } else {
-        // a 3D orbit: the far side runs behind the button, smaller and dimmer, and each fish
-        // turns edge-on at the sides instead of flipping
-        const a = pa.angle + f.orbit;
-        const spread = 1 + pa.burst * 2.4;
-        f.x = px + Math.cos(a) * TITLE.orbit.rx * spread;
-        f.y = py + Math.sin(a) * TITLE.orbit.ry * spread + Math.sin(a * 2 + f.orbit) * 8;
-        const facing = -Math.sin(a);
-        f.dir = Math.sign(facing || 1) * Math.max(0.12, Math.abs(facing));
-        f.scale = 0.82 + 0.26 * (Math.sin(a) + 1) / 2;
-        f.depth = Math.sin(a);
-        f.bobPhase += dt * 2.2;
-        f.breath -= dt;
-        if (f.wiggleT >= 0) { f.wiggleT += dt; if (f.wiggleT > 0.45) f.wiggleT = -1; }
-      }
-      if (f.breath <= 0) {
-        f.breath = 1.4 + Math.random() * 2.4;
-        f.puffs += 1 + Math.floor(Math.random() * 3);
-      }
-      if (f.puffs > 0) {
-        this.titleFx.puff(f.x + Math.sign(f.dir) * f.w * 0.42 * f.scale, f.y + f.h * 0.1, Math.sign(f.dir), f.puffs);
-        f.puffs = 0;
-      }
-    }
     this.titleSplashIn -= dt;
     if (this.titleSplashIn <= 0) {
       this.titleSplashIn = 0.9 + Math.random() * 1.1;
@@ -1067,6 +1062,7 @@ class Game {
 
   update(dt) {
     if (state.phase === PHASE.INTRO || this.titleFade > 0) this.updateTitle(dt);
+    if (!assets.sheets.fishing) return; // the title plays while the rest of the art arrives
     clock.update(dt);
     const speaking = this.dialogue && !this.dialogue.settled &&
       (this.dialogue.next < this.dialogue.words.length || this.dialogue.held < 250);
@@ -1085,8 +1081,7 @@ class Game {
       this.nextNudge = (this.nextNudge || 3) - dt;
       if (this.nextNudge <= 0) {
         this.nextNudge = 3.4;
-        this.swiftee.hop();
-        this.popo.act('dance');
+        this.swiftee.hop(); // Popo keeps laughing (his loop runs until Next)
         this.audio.play('chirp');
       }
     }
@@ -1123,52 +1118,110 @@ class Game {
     this.updateInstruction(dt);
   }
 
-  // The painting goes through the per-pixel water pass (src/water.js); without WebGL it is
-  // drawn plainly.
+  // The painting goes through the per-pixel water pass (src/water.js); without WebGL it is drawn
+  // plainly. While Popo rows on, it pans to the next place with depth parallax. Returns the drift
+  // the underwater effects follow during a row.
   drawBackground(ctx) {
-    const painting = assets.backgrounds[SCENE.background];
-    if (!painting) { preloadBackground(SCENE.background); return; }
+    const index = PLACES[this.place].background;
+    const current = assets.backgrounds[index];
+    if (!current) { preloadBackground(index); return 0; }
+    const k = this.transition ? this.transition.k : 0;
+    const next = this.transition ? assets.backgrounds[PLACES[this.transition.to].background] : null;
     if (this.water.ok) {
       this.syncWaterCanvas();
       const drawn = this.water.render({
-        from: painting, to: null, mix: 0, time: this.fx.t, waterline: this.waterline,
-        plants: this.fx.plantsFor(SCENE.background), amplitude: this.fx.reduced ? 0.35 : 1,
+        from: current, to: next, mix: k, time: this.fx.t, waterline: this.waterline,
+        plants: this.fx.plantsFor(index), amplitude: this.fx.reduced ? 0.35 : 1,
       });
       if (drawn) {
         this.water.show(true);
-        return;
+        return -Math.sin(k * Math.PI) * 18;
       }
     }
     this.water.show(false);
-    ctx.drawImage(painting, 0, 0, STAGE_W, STAGE_H);
+    if (next) this.drawParallaxPlain(ctx, current, next, k);
+    else ctx.drawImage(current, 0, 0, STAGE_W, STAGE_H);
+    return 0;
   }
 
-  // --- the angle recall card, the hook reminder and the basket ---------------------------------
-  // The card opens empty; recallStep('leg') lights the leg and brings in each angle, and
-  // recallStep('sum') the sum, each timed from when it's called (so they follow Swiftee's beats).
+  featheredCopy(img) {
+    if (this.featheredSource === img) return this.feathered;
+    const c = document.createElement('canvas');
+    c.width = STAGE_W;
+    c.height = STAGE_H;
+    const cx = c.getContext('2d');
+    cx.drawImage(img, 0, 0, STAGE_W, STAGE_H);
+    const mask = cx.createLinearGradient(0, 0, PAN_OVERLAP, 0);
+    mask.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    mask.addColorStop(1, 'rgba(0, 0, 0, 1)');
+    cx.globalCompositeOperation = 'destination-in';
+    cx.fillStyle = mask;
+    cx.fillRect(0, 0, PAN_OVERLAP, STAGE_H);
+    cx.fillStyle = '#000';
+    cx.fillRect(PAN_OVERLAP, 0, STAGE_W - PAN_OVERLAP, STAGE_H);
+    this.feathered = c;
+    this.featheredSource = img;
+    return c;
+  }
+
+  // Without WebGL: the two paintings slide with a feathered seam.
+  drawParallaxPlain(ctx, current, next, k) {
+    const pan = STAGE_W - PAN_OVERLAP;
+    const ox = -k * pan;
+    ctx.drawImage(current, ox, 0, STAGE_W, STAGE_H);
+    ctx.save();
+    ctx.translate(ox + STAGE_W * 2, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(current, 0, 0, STAGE_W, STAGE_H);
+    ctx.restore();
+    const smooth = (a, b, x) => { const v = Math.min(1, Math.max(0, (x - a) / (b - a))); return v * v * (3 - 2 * v); };
+    ctx.globalAlpha = smooth(0, 0.07, k);
+    ctx.drawImage(this.featheredCopy(next), ox + pan, 0, STAGE_W, STAGE_H);
+    ctx.globalAlpha = smooth(0.93, 1, k);
+    if (ctx.globalAlpha > 0) ctx.drawImage(next, 0, 0, STAGE_W, STAGE_H);
+    ctx.globalAlpha = 1;
+  }
+
+  // --- the angle recall card and the hook reminder ---------------------------------------------
+  // The card fades up and draws its trapezium on Swiftee's first word; each later step starts on
+  // the word that names it (recallStep), so the card follows the voice.
   showRecall() {
-    this.recall = { t: 0, leaving: 0, leg: Infinity, angles: [Infinity, Infinity], sum: Infinity, popped: [], chimed: false,
-      marks: geometry.layoutMarks(RECALL.body, 30, ['angles'], { corners: RECALL.corners, font: 30 }) };
+    const marks = geometry.layoutMarks(RECALL.body, 30, ['angles'], { corners: RECALL.corners, font: 30 });
+    this.recall = {
+      t: 0, leaving: 0, trace: 0.25, parallel: Infinity, leg: Infinity, angles: [Infinity, Infinity], sum: Infinity, cheer: Infinity,
+      ticked: [], chimed: false, cheered: false, marks,
+      bases: geometry.classify(RECALL.body).bases, // the parallel pair, measured from the shape
+    };
   }
 
   recallStep(step) {
     const r = this.recall;
     if (!r) return;
-    if (step === 'leg') Object.assign(r, { leg: r.t + 0.05, angles: [r.t + 0.6, r.t + 1.2] });
+    if (step === 'parallel') r.parallel = Math.max(r.t, r.trace + 1.3); // once the shape is drawn
+    if (step === 'leg') Object.assign(r, { leg: r.t + 0.05, angles: [r.t + 0.5, r.t + 1.1] });
     if (step === 'sum') r.sum = r.t + 0.1;
+    if (step === 'cheer') r.cheer = r.t;
   }
 
-  // As the two pieces land together on the line: a ta-da and a little sparkle.
+  // A soft tick as each number appears; a ta-da as the two pieces land on the line; on "Yay!" a
+  // chime, a hop from Swiftee, a happy cheer from Popo and a few sparkles at the angles.
   updateRecall(dt) {
     const r = this.recall;
     r.t += dt;
-    for (const [i, at] of r.angles.entries()) {
-      if (r.t >= at && !r.popped[i]) { r.popped[i] = true; this.audio.play('boing'); }
-    }
+    r.angles.forEach((at, i) => {
+      if (r.t >= at + 0.25 && !r.ticked[i]) { r.ticked[i] = true; this.audio.play('tick'); }
+    });
     if (r.t >= r.sum + 0.75 && !r.chimed) {
       r.chimed = true;
       this.audio.play('tada');
-      this.fx.sparkle(RECALL_CARD.x, RECALL_CARD.y + RECALL_CARD.line - 40, 12);
+    }
+    if (r.t >= r.cheer && !r.cheered) {
+      r.cheered = true;
+      this.audio.play('chime');
+      if (this.swiftee) this.swiftee.hop();
+      this.popo.act('catch');
+      const { x, y, diagram } = RECALL_CARD;
+      for (const arc of r.marks.arcs) this.fx.sparkle(x + arc.at[0], y + diagram + arc.at[1], 3);
     }
     if (r.leaving && (r.leaving += dt) > 0.35) this.recall = null;
   }
@@ -1177,9 +1230,10 @@ class Game {
     if (this.recall) this.recall.leaving = 0.001;
   }
 
-  // One trapezium on a card. Its left leg lights up and a coloured piece pops into the angle at
-  // each end of it; then the two pieces fly out and snap together on a straight line, which is
-  // 180°, and the sum bounces in. The angles are measured from the drawn trapezium.
+  // One trapezium on a card. It traces itself and fills in; its two parallel sides glow gold; its
+  // left leg lights up pink and the angle at each end of it opens with its number; then the two
+  // pieces fly out and snap together on a straight line, which is 180°, and the sum bounces in.
+  // Everything is measured from the drawn trapezium.
   drawRecall(ctx) {
     const r = this.recall;
     if (!r) return;
@@ -1187,11 +1241,12 @@ class Game {
     const { px, arcs, labels } = r.marks;
     const at = (start, length = 0.35) => Math.max(0, Math.min(1, (r.t - start) / length));
     const still = this.fx.reduced;
+    // the card: fades in rising 14px into place, with the smallest settle
+    const k0 = at(0, 0.55);
+    const rise = still ? 0 : 14 * (1 - ease.out(k0)) - 2.5 * Math.sin(k0 * Math.PI) * (1 - k0);
     ctx.save();
-    ctx.globalAlpha = Math.min(1, r.t / 0.2) * (r.leaving ? Math.max(0, 1 - r.leaving / 0.35) : 1);
-    ctx.translate(x, y);
-    const pop = still ? 1 : ease.outBack(at(0, 0.4));
-    ctx.scale(pop, pop);
+    ctx.globalAlpha = ease.out(k0) * (r.leaving ? Math.max(0, 1 - r.leaving / 0.35) : 1);
+    ctx.translate(x, y + rise);
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     ctx.beginPath();
@@ -1208,34 +1263,72 @@ class Game {
     ctx.stroke();
     ctx.save();
     ctx.translate(0, diagram);
+    const side = (i, from = 0, to = 1) => {
+      const [p, q] = [px[i], px[(i + 1) % px.length]];
+      ctx.moveTo(p[0] + (q[0] - p[0]) * from, p[1] + (q[1] - p[1]) * from);
+      ctx.lineTo(p[0] + (q[0] - p[0]) * to, p[1] + (q[1] - p[1]) * to);
+    };
+    // the shape: its fill fades in once the outline has been traced round its real edges
+    const fill = at(r.trace + 0.85, 0.35);
+    if (fill > 0) {
+      ctx.beginPath();
+      px.forEach(([px0, py0], i) => (i ? ctx.lineTo(px0, py0) : ctx.moveTo(px0, py0)));
+      ctx.closePath();
+      ctx.globalAlpha *= fill;
+      ctx.fillStyle = '#d6edff';
+      ctx.fill();
+      ctx.globalAlpha /= fill;
+    }
+    const lengths = px.map((p, i) => Math.hypot(px[(i + 1) % px.length][0] - p[0], px[(i + 1) % px.length][1] - p[1]));
+    let left = (still ? 1 : ease.inOut(at(r.trace, 0.9))) * lengths.reduce((a, b) => a + b, 0);
     ctx.beginPath();
-    px.forEach(([px0, py0], i) => (i ? ctx.lineTo(px0, py0) : ctx.moveTo(px0, py0)));
-    ctx.closePath();
-    ctx.fillStyle = '#d6edff';
-    ctx.fill();
-    ctx.lineWidth = 4;
+    lengths.forEach((len, i) => {
+      if (left <= 0) return;
+      side(i, 0, Math.min(1, left / len));
+      left -= len;
+    });
+    const emphasis = Math.sin(at(r.trace + 1.0, 0.45) * Math.PI);
+    ctx.lineWidth = 4 + emphasis * 2;
     ctx.strokeStyle = '#14284b';
     ctx.stroke();
-    // the leg, from D up to A, with a little glow while it's the star
+    // the parallel pair: gold travels along both sides together, holds, then fades back
+    const gold = at(r.parallel, 0.6) * (1 - at(r.parallel + 2.4, 0.4));
+    if (gold > 0) {
+      const run = still ? 1 : ease.inOut(at(r.parallel, 0.6));
+      const alpha = Math.min(1, gold * 1.5);
+      for (const [width, colour] of [[11, 'rgba(255, 255, 255, 0.9)'], [7, '#ffc21e']]) {
+        ctx.beginPath();
+        for (const i of r.bases) side(i, 0, run);
+        ctx.lineWidth = width;
+        ctx.strokeStyle = colour;
+        ctx.globalAlpha *= alpha;
+        ctx.stroke();
+        ctx.globalAlpha /= alpha;
+      }
+    }
+    // the leg, from D up to A
     const k = at(r.leg, 0.4);
     if (k > 0) {
       const [d, a] = [px[0], px[3]];
-      const glow = still ? 0 : Math.max(0, Math.sin((r.t - r.leg) * 6)) * (1 - at(r.leg + 1.2, 0.6));
       ctx.beginPath();
       ctx.moveTo(d[0], d[1]);
       ctx.lineTo(d[0] + (a[0] - d[0]) * k, d[1] + (a[1] - d[1]) * k);
-      ctx.lineWidth = 9 + glow * 5;
+      ctx.lineWidth = 9;
       ctx.strokeStyle = '#ff5d8f';
       ctx.stroke();
     }
+    // each angle opens round its corner, then its number pops a little and settles
     arcs.forEach((arc, i) => {
-      const shown = at(r.angles[i], 0.3);
-      if (shown <= 0) return;
-      const grow = still ? 1 : ease.outBack(shown);
-      drawPiece(ctx, arc.at, pieceOf(arc), 36 * grow, pieces[i]);
-      ctx.globalAlpha *= shown;
-      drawLabel(ctx, labels[i].text, labels[i].at[0], labels[i].at[1], 30 * grow);
-      ctx.globalAlpha /= shown;
+      const open = at(r.angles[i], 0.35);
+      if (open <= 0) return;
+      const piece = pieceOf(arc);
+      drawPiece(ctx, arc.at, { start: piece.start, sweep: piece.sweep * (still ? 1 : ease.out(open)) }, 36, pieces[i]);
+      const pop = at(r.angles[i] + 0.25, 0.3);
+      if (pop <= 0) return;
+      const size = 30 * (still ? 1 : 1 + 0.25 * Math.sin(pop * Math.PI));
+      ctx.globalAlpha *= pop;
+      drawLabel(ctx, labels[i].text, labels[i].at[0], labels[i].at[1], size);
+      ctx.globalAlpha /= pop;
     });
     ctx.restore();
     // the two pieces fly down and snap together on the line: a straight angle
@@ -1311,60 +1404,6 @@ class Game {
     ctx.restore();
   }
 
-  // At the end every fish caught leaps out of the water, one after another, high over Popo and
-  // down into his bucket, out of sight inside it.
-  fillBasket() {
-    this.basket = { t: 0 };
-  }
-
-  leapFrom(i) {
-    return { x: this.popo.anchor.x + 210 + (i % 4) * 46, y: this.waterline + 6 };
-  }
-
-  basketDuration() {
-    return (state.collected.length - 1) * LEAP.gap + LEAP.time;
-  }
-
-  // Splashes as the fish leave the water and a sparkle as they land; a chime for every few.
-  updateBasket(dt) {
-    const b = this.basket;
-    const before = b.t;
-    b.t += dt;
-    state.collected.forEach((fish, i) => {
-      const start = i * LEAP.gap;
-      if (before < start && b.t >= start) this.fx.splash(this.leapFrom(i).x, this.waterline, false);
-      if (before < start + LEAP.time && b.t >= start + LEAP.time) {
-        const rim = this.popo.bucketRim();
-        this.fx.sparkle(rim.x, rim.y - 12, 4);
-        if (i % 4 === 3 || i === state.collected.length - 1) this.audio.play('collect');
-      }
-    });
-  }
-
-  drawLeaps(ctx) {
-    const b = this.basket;
-    if (!b) return;
-    const rim = this.popo.bucketRim();
-    ctx.save();
-    // everything except the inside of the bucket
-    ctx.beginPath();
-    ctx.rect(0, 0, STAGE_W, STAGE_H);
-    ctx.rect(rim.x - 30, rim.y, 60, 80);
-    ctx.clip('evenodd');
-    const peak = rim.y - 430; // the arc clears Popo's head
-    state.collected.forEach((fish, i) => {
-      const k = (b.t - i * LEAP.gap) / LEAP.time;
-      if (k <= 0 || k >= 1) return;
-      const from = this.leapFrom(i);
-      const to = { x: rim.x, y: rim.y + 24 };
-      const x = from.x + (to.x - from.x) * k;
-      const y = (1 - k) ** 2 * from.y + 2 * (1 - k) * k * peak + k * k * to.y;
-      const dy = 2 * (1 - k) * (peak - from.y) + 2 * k * (to.y - peak);
-      fish.drawMini(ctx, x, y, 68, Math.atan2(dy, to.x - from.x) * 0.5 + Math.PI * 0.1, true);
-    });
-    ctx.restore();
-  }
-
   // The play button floats in the water: a gentle bob and sway, a breathing warm glow behind
   // it, an occasional shine across its face, a grow on hover and a squash when pressed.
   drawPlayButton(ctx, alpha) {
@@ -1432,19 +1471,9 @@ class Game {
     }
     ctx.save();
     ctx.globalAlpha = alpha;
-    this.titleFx.drawWater(ctx, 0, this.titleFish);
+    this.titleFx.drawWater(ctx, 0, []);
     ctx.restore();
-    const behind = this.titleFish.filter((f) => f.zone || f.depth < 0);
-    const inFront = this.titleFish.filter((f) => !f.zone && f.depth >= 0);
-    for (const f of behind) {
-      f.alpha = alpha * (f.zone ? 1 : 0.72 + 0.28 * (1 + f.depth));
-      f.draw(ctx);
-    }
     this.drawPlayButton(ctx, alpha);
-    for (const f of inFront) {
-      f.alpha = alpha;
-      f.draw(ctx);
-    }
     ctx.save();
     ctx.globalAlpha = alpha;
     this.titleFx.drawFront(ctx);
@@ -1479,8 +1508,8 @@ class Game {
       this.drawTitle(ctx, 1);
       return;
     }
-    this.drawBackground(ctx);
-    this.fx.drawWater(ctx, 0, state.fish);
+    const offset = this.drawBackground(ctx);
+    this.fx.drawWater(ctx, offset, state.fish);
     for (const f of this.ambient) f.draw(ctx);
     if (this.shadow) this.shadow.draw(ctx);
     this.drawSpeedLines(ctx);
@@ -1500,7 +1529,6 @@ class Game {
     }
     this.drawHandRipple(ctx);
     this.popo.draw(ctx);
-    this.drawLeaps(ctx);
     this.drawHookRing(ctx);
     this.drawMark(ctx);
     this.drawRaftWater(ctx);
@@ -1511,8 +1539,7 @@ class Game {
     this.drawVignette(ctx);
     this.drawBursts(ctx);
     if (this.titleFade > 0) this.drawTitle(ctx, this.titleFade);
-    this.drawIris(ctx);
-    if (this.ending) this.drawEnding(ctx);
+    this.drawCurtain();
     this.ui.syncHits(state.fish);
   }
 
@@ -1699,7 +1726,7 @@ class Game {
     this.vignetteTo = 0;
     this.speedLines = 0;
     this.shaking = null;
-    this.ui.el.scene.style.transform = '';
+    this.panScene(0, 0);
   }
 
   // A comic sound word ("YANK!") on a jagged yellow starburst that pops up and fades.
@@ -1792,16 +1819,35 @@ class Game {
     ctx.fillRect(0, 0, STAGE_W, STAGE_H);
   }
 
-  // The cartoon iris: everything but a circle is covered in a warm sunburst, and a cream ring frames
-  // the circle. The circle shows the scene around `focus`, live, wherever the circle itself is, so it
-  // can glide to the middle of the screen with Popo and Swiftee still inside it.
+  // The iris and "The End" are drawn on the curtain layer, above the scene. The scene slides under
+  // it (panScene), so the circle always shows the live game.
+  drawCurtain() {
+    const busy = this.iris || this.ending;
+    if (!busy && !this.curtainShown) return;
+    const ctx = this.stage.beginCurtain();
+    ctx.clearRect(0, 0, STAGE_W, STAGE_H);
+    this.curtainShown = Boolean(busy);
+    if (this.iris) this.drawIris(ctx);
+    if (this.ending) this.drawEnding(ctx);
+  }
+
+  // Slides the scene (painting, water, Popo, Swiftee) by (dx, dy) stage pixels.
+  panScene(dx, dy) {
+    const k = this.stage.scale;
+    this.ui.el.scene.style.transform = dx || dy ? `translate(${(dx * k).toFixed(1)}px, ${(dy * k).toFixed(1)}px)` : '';
+  }
+
+  // The cartoon iris: everything but a circle is covered in a warm sunburst, and a cream ring
+  // frames the circle.
   drawIris(ctx) {
     const iris = this.iris;
-    if (!iris) return;
     const r = Math.max(0, iris.r);
-    const focus = iris.focus || iris;
     const t = this.fx.t;
     ctx.save();
+    ctx.beginPath();
+    ctx.rect(-10, -10, STAGE_W + 20, STAGE_H + 20);
+    ctx.arc(iris.x, iris.y, r, 0, TAU);
+    ctx.clip('evenodd');
     const glow = ctx.createRadialGradient(iris.x, iris.y, r, iris.x, iris.y, r + STAGE_W);
     glow.addColorStop(0, '#ffb347');
     glow.addColorStop(0.18, '#ff6f61');
@@ -1822,21 +1868,7 @@ class Game {
       ctx.fill();
     }
     ctx.restore();
-    if (r < 1) return;
-    // inside the circle: the lake, the raft, Popo and Swiftee around the focus point
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(iris.x, iris.y, r, 0, TAU);
-    ctx.clip();
-    ctx.translate(iris.x - focus.x, iris.y - focus.y);
-    const painting = assets.backgrounds[SCENE.background];
-    if (painting) ctx.drawImage(painting, 0, 0, STAGE_W, STAGE_H);
-    this.fx.drawWater(ctx, 0, []);
-    this.popo.drawLine(ctx);
-    this.popo.draw(ctx);
-    this.drawRaftWater(ctx);
-    if (this.swiftee) this.swiftee.draw(ctx);
-    ctx.restore();
+    if (r < 4) return;
     ctx.save();
     ctx.beginPath();
     ctx.arc(iris.x, iris.y, r, 0, TAU);

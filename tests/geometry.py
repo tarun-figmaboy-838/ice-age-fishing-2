@@ -57,7 +57,8 @@ CHECK = r'''() => {
     if (L === 1 && f.correct && c.kind !== 'trapezium') fail(f.id, 'level 1 catch not a trapezium');
     if (L === 1 && !f.correct && c.parallel.length) fail(f.id, 'level 1 distractor has parallel sides');
     if (L === 2 && f.correct && c.type !== 'scalene') fail(f.id, 'level 2 catch not a non-right scalene trapezium');
-    if (L === 2 && !f.correct && !['isosceles', 'right'].includes(c.type)) fail(f.id, 'level 2 distractor not isosceles or right');
+    if (L === 2 && !f.correct && c.type !== 'isosceles') fail(f.id, 'level 2 distractor not isosceles (no right-angled fish in level 2)');
+    if (L !== 4 && c.right.length) fail(f.id, 'right angles only in level 4');
     if (L === 2) c.legLengths.forEach((l) => { if (!near(l, Math.round(l), 1e-9)) fail(f.id, `leg ${l} not whole units`); });
     if (L === 3 && f.correct !== (c.kind === 'trapezium' && c.equalLegs)) fail(f.id, 'level 3: catch must have equal legs, distractors unequal');
     if (L === 3 && !f.correct && c.kind !== 'trapezium') fail(f.id, 'level 3 distractor not a trapezium');
@@ -102,8 +103,15 @@ CHECK = r'''() => {
     const id = `${fish.spec.id}@${font}`;
     const boxes = m.labels.map((l) => ({ x0: l.at[0] - l.hw, x1: l.at[0] + l.hw, y0: l.at[1] - l.hh, y1: l.at[1] + l.hh, l }));
     const overlap = (a, b, pad = 2) => a.x0 < b.x1 + pad && b.x0 < a.x1 + pad && a.y0 < b.y1 + pad && b.y0 < a.y1 + pad;
-    // a circle (centre, radius) against a box
-    const hits = (c, b, pad = 0) => Math.hypot(Math.max(b.x0 - c.at[0], 0, c.at[0] - b.x1), Math.max(b.y0 - c.at[1], 0, c.at[1] - b.y1)) < c.r + pad;
+    // a circle (centre, radius) against a box, or against a length label turned along its leg
+    const hits = (c, b, pad = 0) => {
+      const l = b.l;
+      if (l && l.angle !== undefined) {
+        const u = [Math.cos(l.angle), Math.sin(l.angle)], d = [c.at[0] - l.at[0], c.at[1] - l.at[1]];
+        return Math.hypot(Math.max(Math.abs(d[0] * u[0] + d[1] * u[1]) - l.len, 0), Math.max(Math.abs(-d[0] * u[1] + d[1] * u[0]) - l.thick, 0)) < c.r + pad;
+      }
+      return Math.hypot(Math.max(b.x0 - c.at[0], 0, c.at[0] - b.x1), Math.max(b.y0 - c.at[1], 0, c.at[1] - b.y1)) < c.r + pad;
+    };
     const circles = [
       ...m.arrows.map((a) => ({ at: a.at, r: M.chevron + M.gap / 2 + 1.5 })),
       ...m.ticks.map((t) => ({ at: t.at, r: M.tick + 1 })),
@@ -115,9 +123,20 @@ CHECK = r'''() => {
     });
     const eye = { at: fish.face.eye, r: fish.eyeR * 1.12 };
     const smile = { at: fish.face.smile, r: fish.eyeR * 0.5 };
+    // a label's own corners: a length turned along its leg, or an upright box
+    const corners = (l) => {
+      if (l.angle === undefined) return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => [l.at[0] + sx * l.hw, l.at[1] + sy * l.hh]);
+      const u = [Math.cos(l.angle), Math.sin(l.angle)], n = [-u[1], u[0]];
+      return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [l.at[0] + u[0] * a * l.len + n[0] * b * l.thick, l.at[1] + u[1] * a * l.len + n[1] * b * l.thick]);
+    };
     boxes.forEach((b, i) => {
-      for (const [x, y] of [[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]]) {
-        if (!G.inside(fish.px, [x, y])) { fail(id, `label ${b.l.text} pokes out of the body`); break; }
+      for (const p of corners(b.l)) {
+        if (!G.inside(fish.px, p)) { fail(id, `label ${b.l.text} pokes out of the body`); break; }
+      }
+      if (b.l.side !== undefined) {
+        // a length sits beside the middle of its own leg, nearer that leg than any other side
+        const d = fish.px.map((p, k) => G.distanceToSegment(b.l.at, p, fish.px[(k + 1) % 4]));
+        if (d.indexOf(Math.min(...d)) !== b.l.side) fail(id, `label ${b.l.text} is nearer another side than its leg`);
       }
       boxes.slice(i + 1).forEach((o) => { if (overlap(b, o)) fail(id, `labels ${b.l.text} and ${o.l.text} overlap`); });
       if (hits(eye, b, 2) || hits(smile, b, 2)) fail(id, `label ${b.l.text} touches the face`);

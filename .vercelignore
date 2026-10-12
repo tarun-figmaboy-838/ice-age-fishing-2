@@ -1,8 +1,10 @@
 asset/
 tools/
+tests/
 README.md
 .DS_Store
 .env
 .env.*
 assets/sprites/paddling/
+assets/sprites/*.png
 assets/voice/

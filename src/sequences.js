@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { clock, ease, Cancelled, state, PHASE, newToken, isCurrent, Fish, Swiftee, STORY, LEVELS, STAGE_W, STAGE_H } = PopoGame;
+const { clock, ease, Cancelled, state, PHASE, newToken, isCurrent, Fish, Swiftee, STORY, LEVELS, PLACES, STAGE_W, STAGE_H } = PopoGame;
 
 // The hook hangs this far below the line's end.
 // the line ends at the lip; the hooked fish is drawn over the hook, so it sits inside the mouth
@@ -78,41 +78,62 @@ async function correctCatch(game, fish) {
     audio.play('hooked');
     // in level 5 the angles told us; now the fish shows its parallel sides
     if (fish.markedAngles.length && fish.revealParallel()) audio.play('boing');
-    await clock.wait(380, token);
+    await clock.wait(300, token);
 
+    // reeled in towards the rod: it fights the line (less as it tires), tail flicking, nose rising,
+    // trailing bubbles; fish in the way dart clear of the line
     state.phase = PHASE.REELING;
     audio.play('reel');
     popo.playFrames('casting', ['reel', 'reel2'], 150, true);
     const start = { x: fish.x, y: fish.y };
-    const surface = { x: popo.raftRight().x + 70, y: game.waterline - 14 };
-    fish.dir = -1;
-    await clock.tween(950, token, (t) => {
+    const tip = popo.rodTip();
+    const surface = { x: Math.max(popo.raftRight().x + fish.w * 0.5 + 16, tip.x + 10), y: game.waterline + 4 };
+    fish.dir = Math.sign(surface.x - fish.x) || -1;
+    game.clearPath(start, surface, fish);
+    const along = [surface.x - start.x, surface.y - start.y];
+    const span = Math.hypot(...along) || 1;
+    let bubbled = 0;
+    await clock.tween(850, token, (t) => {
       const k = ease.inOut(t);
-      fish.x = start.x + (surface.x - start.x) * k;
-      fish.y = start.y + (surface.y - start.y) * k;
-      popo.line.tension = 1.3;
+      const fight = Math.sin(t * Math.PI * 6) * (1 - t) * 12;
+      fish.x = start.x + along[0] * k - (along[1] / span) * fight;
+      fish.y = start.y + along[1] * k + (along[0] / span) * fight;
+      fish.pitch = Math.sin(t * Math.PI * 7) * 0.12 * (1 - t) - 0.18 * k;
+      popo.line.tension = 1.3 + Math.abs(fight) / 30;
+      if (t - bubbled > 0.12) { bubbled = t; fx.puff(fish.x - fish.dir * fish.w * 0.4, fish.y, -fish.dir, 2); }
     });
-    fx.splash(surface.x, game.waterline, false);
-    audio.play('splashSmall');
 
+    // out it bursts, and swings up on the line high over Popo's head (never through him), then
+    // drops into the bucket, behind its rim
+    fx.splash(fish.x, game.waterline, true);
+    audio.play('splashSmall');
     popo.stopFrames();
-    popo.setPose('casting', 'up', 140);
-    const bucket = popo.bucketPoint();
-    const peak = { x: (surface.x + bucket.x) / 2, y: Math.min(surface.y, bucket.y) - 170 };
-    await clock.tween(680, token, (t) => {
+    popo.setPose('casting', 'up');
+    fish.dir = -1;
+    const from = { x: fish.x, y: fish.y };
+    const rim = popo.bucketRim();
+    const over = Math.min(popo.headTop().y - 215, from.y - 230); // a clear gap above his head
+    const path = [from, { x: from.x, y: over }, { x: rim.x, y: over }, { x: rim.x, y: rim.y + 34 }];
+    const at = (k, i) => (1 - k) ** 3 * path[0][i] + 3 * (1 - k) ** 2 * k * path[1][i] + 3 * (1 - k) * k * k * path[2][i] + k ** 3 * path[3][i];
+    let dripped = 0;
+    let last = { ...from };
+    await clock.tween(800, token, (t) => {
       const k = ease.inOut(t);
-      fish.x = (1 - k) * (1 - k) * surface.x + 2 * (1 - k) * k * peak.x + k * k * bucket.x;
-      fish.y = (1 - k) * (1 - k) * surface.y + 2 * (1 - k) * k * peak.y + k * k * bucket.y;
-      fish.scale = 1 - 0.6 * k;
+      fish.x = at(k, 'x');
+      fish.y = at(k, 'y');
+      fish.scale = 1 - 0.5 * k;
+      const v = [fish.x - last.x, fish.y - last.y];
+      if (Math.hypot(...v) > 0.5) fish.pitch = Math.max(-0.9, Math.min(0.9, Math.atan2(v[1], Math.abs(v[0])) * 0.7));
+      last = { x: fish.x, y: fish.y };
       popo.line.tension = 1;
+      if (t - dripped > 0.18 && t < 0.75) { dripped = t; fx.drips({ x: fish.x, y: fish.y + fish.h * 0.3 * fish.scale }); }
     });
 
     fish.gone = true;
-    fx.sparkle(bucket.x, bucket.y - 10, 12);
+    fx.sparkle(rim.x, rim.y - 14, 12);
     audio.play('collect');
-    popo.line.mode = 'dangle';
-    popo.line.tension = 0;
     popo.idle();
+    springHome(game, token);
     game.collect(fish);
     state.phase = PHASE.CELEBRATING;
     state.streak += 1;
@@ -123,17 +144,39 @@ async function correctCatch(game, fish) {
     if (combo >= 2) {
       // on a streak, Popo bounces twice and the fish cheer harder
       audio.play(combo >= 3 ? 'combo3' : 'combo2');
-      fx.sparkle(bucket.x, bucket.y - 30, 10 + combo * 6);
+      fx.sparkle(rim.x, rim.y - 30, 10 + combo * 6);
       game.cheer();
       clock.wait(380, token).then(() => game.storyCue('hop')).catch(() => {});
     }
-    // the level's feedback, with the caught fish's own angles in level 5
-    const beats = [].concat(game.level().right(fish.markedAngles));
-    await game.sayAll(beats.map((text, i) => ({ who: 'popo', text, cue: i ? undefined : { word: 0, do: 'hop' } })), token);
+    // "Great catch!" and "Keep going!" in turn
+    await game.say(STORY.right[(state.collected.length - 1) % STORY.right.length], token);
     game.afterCatch();
   } catch (e) {
     swallow(e);
   }
+}
+
+// After a catch the empty hook springs back from the bucket to hang from the rod again.
+function springHome(game, token) {
+  const { line } = game.popo;
+  const from = { ...line.hook };
+  const rest = () => {
+    line.mode = 'dangle';
+    const hook = game.popo.hookPosition();
+    line.mode = 'flight';
+    return hook;
+  };
+  line.mode = 'flight';
+  line.tension = 0;
+  clock.tween(420, token, (t) => {
+    const k = ease.out(t);
+    const to = rest();
+    line.hook = { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k - Math.sin(k * Math.PI) * 28 };
+    line.arc = 0.4 * (1 - k);
+  }).then(() => {
+    line.mode = 'dangle';
+    line.arc = 0;
+  }, () => {});
 }
 
 // A single game-clock tween owns the complete reaction. No frame-count damping or
@@ -382,10 +425,12 @@ async function wrongCatch(game, fish) {
 // Before the first line, a cartoon entrance: Popo zooms in rowing flat out (honk honk!), slams
 // on the brakes with a screech, overshoots and springs back boing-boing, swaps paddle for rod
 // in a poof (ta-da!), and hops for joy as a fish leaps up to say hello.
+const OFFSTAGE = -620; // Popo's raft just out of view on the left
+
 async function popoArrives(game, token) {
   const { popo, fx, audio } = game;
   const reduced = fx.reduced;
-  const from = -620;
+  const from = OFFSTAGE;
   const overshoot = reduced ? 0 : 110;
   const stroke = 520; // frantic paddling
   const raftFront = () => popo.placement('fishing', 'idle').raftRightX + popo.travelShift;
@@ -523,9 +568,9 @@ async function fishSaysHello(game, token) {
   await clock.wait(900, token);
 }
 
-// G0: Popo rows in to his spot, and Swiftee flies in from the lesson to start the fishing. Level 1's
-// fish swim in; the first time, Swiftee reminds the learner how the rod works; then Swiftee flies
-// off and the fishing begins.
+// G0: Swiftee flies in from the lesson over the empty lake, welcomes the learner and flies off; then
+// Popo rows in to his spot. Level 1's fish swim in; the first time, Swiftee swoops back to remind the
+// learner how the rod works and flies off again; then the fishing begins.
 async function opening(game) {
   const token = newToken();
   try {
@@ -533,12 +578,16 @@ async function opening(game) {
     game.ui.setHitsEnabled(false);
     state.fish = [];
     game.ui.setInstruction('');
-    await popoArrives(game, token);
+    game.popo.travelShift = OFFSTAGE; // Popo is still on his way
+    await clock.wait(500, token);
     await swifteeArrives(game, STORY.welcome, token);
-    await clock.wait(450, token);
+    await clock.wait(300, token);
+    await swifteeLeaves(game, token);
+    await clock.wait(250, token);
+    await popoArrives(game, token);
+    await clock.wait(300, token);
     game.startLevel(0);
     if (!game.controlsLearned()) await remind(game, token);
-    await swifteeLeaves(game, token);
     game.play();
     game.speakInstruction();
   } catch (e) {
@@ -547,15 +596,16 @@ async function opening(game) {
 }
 
 // The reminder rings the hook and points the tutorial hand at a fish to catch (the hand follows
-// it and stays until the first right catch) while Swiftee explains the rod.
+// it and stays until the first right catch) while Swiftee swoops back to explain the rod.
 async function remind(game, token) {
   while (!game.inViewTarget()) await clock.wait(100, token);
   await clock.wait(600, token);
   game.tutorialPending = true;
   game.showHandOn(game.inViewTarget());
   game.hookRing = { t: 0 };
-  await game.sayAll(STORY.remind, token);
+  await swifteeArrives(game, STORY.remind, token);
   game.hookRing = null;
+  await swifteeLeaves(game, token);
 }
 
 // A level's last catch: its fish dash off and the next level's swim in, with the instruction and
@@ -581,7 +631,6 @@ async function finishLevel(game) {
     if (next < LEVELS.length) {
       game.popo.idle();
       game.popo.act('dance');
-      game.burst(`LEVEL ${next + 1}!`, STAGE_W / 2, game.waterline - 160, 1.3);
     }
     await clock.wait(1300, token);
     state.fish = [];
@@ -590,6 +639,7 @@ async function finishLevel(game) {
       await celebrate(game, token);
       return;
     }
+    if (LEVELS[next].place !== game.place) await rowOn(game, LEVELS[next].place, token);
     if (LEVELS[next].observe) {
       await recallAngles(game, token);
       await observeAngles(game, next, token);
@@ -604,64 +654,145 @@ async function finishLevel(game) {
   }
 }
 
-// G5.1, once before level 5: Swiftee recalls that the angles at the two ends of a trapezium's leg
-// add up to 180°, while a card shows one trapezium: the leg, each angle in turn, then the sum.
+// Popo paddles on round the lake to the next level's place: the scenery pans to it with depth
+// parallax while the raft surges with each stroke and leaves a wake.
+async function rowOn(game, to, token) {
+  const { popo, fx, audio } = game;
+  try {
+    await game.prepareTransition(to, token);
+  } catch (e) {
+    if (e instanceof Cancelled) throw e;
+    return; // the next scenery couldn't load: the level starts here rather than get stuck
+  }
+  if (!isCurrent(token)) throw new Cancelled();
+  audio.setTravel(true);
+  const fromWater = game.waterline;
+  const toWater = PLACES[to].waterline;
+  const duration = fx.reduced ? 2400 : 5400;
+  const stroke = duration / (fx.reduced ? 1 : 3);
+  popo.startRowing(stroke);
+  let lastBlade = popo.paddleTip();
+  let lastSplashStroke = -1;
+  let lastWake = 0;
+  try {
+    await clock.tween(duration, token, (t) => {
+      const k = ease.inOut(t);
+      game.transition.k = k;
+      game.setWaterline(fromWater + (toWater - fromWater) * k);
+      const elapsed = t * duration;
+      popo.setRowingTime(elapsed);
+      // every pull drives the raft forward and lifts the bow a little; it settles as the blade lifts
+      const surge = popo.rowRig.sample(elapsed, stroke).power;
+      const pace = Math.sin(t * Math.PI);
+      popo.travelShift = pace * (18 + surge * 24);
+      popo.tilt = -pace * (0.012 + surge * 0.014);
+      const blade = popo.paddleTip();
+      const strokeIndex = Math.floor(elapsed / stroke);
+      if (strokeIndex !== lastSplashStroke && lastBlade.y < game.waterline && blade.y >= game.waterline) {
+        lastSplashStroke = strokeIndex;
+        const crossing = (game.waterline - lastBlade.y) / (blade.y - lastBlade.y);
+        fx.splash(lastBlade.x + (blade.x - lastBlade.x) * crossing, game.waterline, false);
+        audio.play('paddle');
+      }
+      lastBlade = blade;
+      if (elapsed - lastWake > 380 && t > 0.06 && t < 0.94) {
+        lastWake = elapsed;
+        const stern = popo.placement(popo.pose.sheet, popo.pose.frame).raftLeftX + popo.travelShift;
+        fx.ripple(stern - 12, game.waterline + 6, 0.7);
+      }
+    });
+    game.finishTransition();
+  } finally {
+    // however the row ends (even cancelled by a restart), Popo is left sitting on his spot
+    popo.idle();
+    popo.travelShift = 0;
+    popo.tilt = 0;
+    if (isCurrent(token)) audio.setTravel(false);
+  }
+  await clock.wait(350, token);
+}
+
+// G5.1, once before level 5: something tugs Popo's line (the hook dips, he starts with a "!" and the
+// raft wobbles, then settles); then Swiftee flies in and, with the recall card following her words,
+// shows the trapezium's parallel sides and recalls that the angles on the same leg add up to 180°.
 async function recallAngles(game, token) {
+  const { popo, audio } = game;
   state.phase = PHASE.RECALL;
   game.ui.setInstruction('');
+  const { line } = popo;
+  line.mode = 'flight';
+  audio.play('boing');
+  game.mark = { char: '!', t: 0, colour: '#ffd23f' };
+  try {
+    await clock.tween(game.fx.reduced ? 500 : 1000, token, (t) => {
+      const tug = Math.sin(Math.min(1, t / 0.35) * Math.PI);
+      const tip = popo.rodTip();
+      line.hook = { x: tip.x, y: tip.y + line.length + 26 * tug };
+      line.tension = tug;
+      popo.tilt = 0.03 * Math.sin(t * Math.PI * 3) * (1 - t);
+    });
+  } finally {
+    line.mode = 'dangle';
+    line.tension = 0;
+    popo.tilt = 0;
+  }
+  await clock.wait(150, token);
   await swifteeArrives(game, STORY.recall, token);
-  // the straight line and the sum stay up a moment before the card goes
-  while (game.recall && game.recall.t < Math.min(game.recall.sum + 2.2, 14)) await clock.wait(100, token);
+  await clock.wait(400, token); // a moment to look before the card goes
   game.hideRecall();
   await clock.wait(350, token);
 }
 
-// Where level 5's fish stop for the look, as fractions of the swim area.
-const STATIONS = [[0.3, 0.3], [0.56, 0.27], [0.82, 0.31], [0.43, 0.78], [0.69, 0.76]];
+// Where level 5's fish stop for the look, as fractions of the swim area: the first in the middle,
+// the others round it.
+const STATIONS = [[0.5, 0.5], [0.2, 0.27], [0.8, 0.27], [0.27, 0.8], [0.73, 0.8]];
 
-// G5.2: level 5's fish swim in from the nearer side to their places and hold still while Swiftee
-// says to look at the marked angles; then two seconds just to look (no fishing yet), and they
-// swim on from where they are.
+// G5.2: one of level 5's fish swims into the middle as Swiftee says "Look at the marked angles!",
+// and its two angles light up on "angles!"; then the others swim to their places round it. All
+// hold still for two seconds just to look (no fishing yet), then swim on from where they are.
 async function observeAngles(game, next, token) {
   const { area, ui } = game;
   state.phase = PHASE.OBSERVE;
   game.startLevel(next);
-  const plan = state.fish.map((fish, i) => {
+  ui.setInstruction(''); // the catching instruction comes with the fishing
+  const first = state.fish.find((f) => f.correct) || state.fish[0];
+  const order = [first, ...state.fish.filter((f) => f !== first)];
+  const plan = order.map((fish, i) => {
     const [fx, fy] = STATIONS[i % STATIONS.length];
     const to = { x: area.left + fx * (area.right - area.left), y: area.top + fy * (area.bottom - area.top) };
-    const dir = to.x < STAGE_W / 2 ? 1 : -1;
+    const dir = i === 0 || to.x < STAGE_W / 2 ? 1 : -1;
     const from = dir > 0 ? -fish.w / 2 - 20 : STAGE_W + fish.w / 2 + 20;
-    Object.assign(fish, { offstage: false, frozen: true, dir, x: from, y: to.y, lastY: to.y });
-    return { fish, from, to: to.x, delay: i * 120 };
+    Object.assign(fish, { offstage: true, frozen: true, dir, x: from, y: to.y, lastY: to.y });
+    return { fish, from, to: to.x };
   });
-  const swim = clock.tween(1900, token, (t) => {
-    for (const { fish, from, to, delay } of plan) {
-      const k = ease.out(Math.max(0, Math.min(1, (t * 1900 - delay) / 1400)));
+  const swimIn = (group, ms, gap) => clock.tween(ms + gap * (group.length - 1), token, (t) => {
+    group.forEach(({ fish, from, to }, i) => {
+      const k = ease.out(Math.max(0, Math.min(1, (t * (ms + gap * (group.length - 1)) - i * gap) / ms)));
+      if (k > 0) fish.offstage = false;
       fish.x = from + (to - from) * k;
-    }
+    });
   });
-  swim.catch(() => {});
+  game.spotlight = first; // the story cue on "angles!" lights up its marks
+  const arriving = swimIn(plan.slice(0, 1), 1500, 0);
+  arriving.catch(() => {});
   await game.sayAll(STORY.observe, token);
-  await swim;
-  ui.setInstruction(STORY.observeStep);
-  await clock.wait(2000, token);
+  await arriving;
+  game.spotlight = null;
+  await swimIn(plan.slice(1), 1300, 140);
+  await clock.wait(2000, token); // two seconds just to look
   for (const fish of state.fish) fish.release();
   await swifteeLeaves(game, token);
 }
 
-// G6, after the sixteenth catch: the last fish swim off, every fish caught leaps into Popo's
-// bucket, Popo cheers, Swiftee flies in with "You did it!", then the big-catch gag and the end.
+// G6, after the sixteenth catch: the last fish swim off, Popo cheers, Swiftee flies in with "You
+// did it!", then the big-catch gag and the end.
 async function celebrate(game, token) {
   const { popo, audio, ui } = game;
   ui.setInstruction('');
   audio.play('success');
-  game.fillBasket();
   popo.idle();
   popo.act('dance');
-  const cheering = game.sayAll(STORY.wow, token);
-  cheering.catch(() => {});
-  await clock.wait(game.basketDuration() * 1000 + 200, token);
-  await cheering;
+  await game.sayAll(STORY.wow, token);
   popo.idle();
   await swifteeArrives(game, STORY.done, token);
   await clock.wait(500, token);
@@ -738,7 +869,7 @@ async function bigCatch(game, token) {
   popo.stopFrames();
   popo.tilt = 0;
   popo.lean = 0;
-  popo.setPose('casting', 'up', 0);
+  popo.setPose('casting', 'up');
   const boot = game.showTrash(hold.x, wl + 40);
   const hang = { x: popo.raftRight().x + 470, y: wl - 330 };
   if (bird) {
@@ -762,7 +893,7 @@ async function bigCatch(game, token) {
   // Swiftee, laughing, flutters back down beside him
   if (bird) bird.laughing = true;
   popo.idle();
-  popo.act('laugh');
+  popo.act('giggle', true); // one laugh on and on, rod down, through to the end
   audio.play('laugh');
   boot.hanging = false;
   const top = boot.y;
@@ -786,13 +917,11 @@ async function bigCatch(game, token) {
   const back = bird ? flyTo(game, bird, { x: popo.anchor.x + 360, y: popo.anchor.y - 130 }, 1100, token, -1) : Promise.resolve();
   back.catch(() => {});
   for (const line of STORY.laughs) {
-    popo.act('laugh');
     if (line.who === 'swiftee') audio.play('giggle');
     await game.say(line, token);
   }
   await drop;
   await back;
-  popo.act('laugh');
 }
 
 // Swiftee flutters to a spot in a little arc, then faces `facing` (1 right, -1 left).
@@ -818,6 +947,7 @@ async function theEnd(game, token) {
   const { popo, audio } = game;
   const bird = game.swiftee;
   const head = popo.headTop();
+  popo.act('giggle', true); // still laughing (the loop carries on from the gag)
   // Swiftee snuggles in beside Popo, so the circle can frame the two of them whole
   if (bird) await flyTo(game, bird, { x: head.x + 250, y: head.y + 50 }, 700, token, -1);
   const raft = popo.placement('fishing', 'idle');
@@ -833,15 +963,17 @@ async function theEnd(game, token) {
     y: Math.min(STAGE_H - r, Math.max(r, (box.top + box.bottom) / 2)),
   };
   const spot = { x: STAGE_W / 2, y: Math.min(STAGE_H - r - 22, Math.max(575, r + 245)) };
-  game.iris = { ...focus, r: 1500, focus };
+  // the circle closes in place round the two of them, then glides to the middle carrying the live
+  // scene with it (only once it's small, so its view never runs off the painting)
+  game.iris = { ...focus, r: 1500 };
   audio.play('iris');
-  await clock.tween(game.fx.reduced ? 600 : 1400, token, (t) => {
+  await clock.tween(game.fx.reduced ? 400 : 950, token, (t) => { game.iris.r = 1500 + (r - 1500) * ease.inOut(t); });
+  await clock.tween(game.fx.reduced ? 300 : 750, token, (t) => {
     const k = ease.inOut(t);
-    game.iris.r = 1500 + (r - 1500) * k;
     game.iris.x = focus.x + (spot.x - focus.x) * k;
     game.iris.y = focus.y + (spot.y - focus.y) * k;
+    game.panScene(game.iris.x - focus.x, game.iris.y - focus.y);
   });
-  popo.act('giggle', true); // he keeps laughing, rod down, until Next
   game.showEnding();
   audio.play('tada');
   await clock.wait(1300, token); // "The End" pops in
@@ -875,6 +1007,7 @@ async function swifteeArrives(game, lines, token, onLine = () => {}) {
   const from = { x: STAGE_W + 140, y: 120 };
   const to = { x: popo.anchor.x + 360, y: popo.anchor.y - 130 };
   const bird = new Swiftee(from.x, from.y);
+  bird.faceViewer = lines === STORY.welcome;
   bird.onDownstroke = () => audio.play('flap');
   game.swiftee = bird;
   audio.play('whoosh');
@@ -903,6 +1036,7 @@ async function swifteeArrives(game, lines, token, onLine = () => {}) {
 async function swifteeLeaves(game, token) {
   const bird = game.swiftee;
   if (!bird) return;
+  bird.faceViewer = false;
   const from = { x: bird.x, y: bird.y };
   bird.dir = 1;
   bird.onDownstroke = () => game.audio.play('flap');

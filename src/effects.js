@@ -19,6 +19,8 @@ const PLANTS = [
   left, right, top, root, phase: 1.17 + i * 2.39 + location * 0.71,
   speed: 0.48 + i * 0.073, amp: root - top > 120 ? 3.4 : 1.5,
 })));
+// the fifth place is the first bay mirrored, and so are its plants
+PLANTS.push(PLANTS[0].map((p) => ({ ...p, left: STAGE_W - p.right, right: STAGE_W - p.left, phase: p.phase + 1.3 })));
 
 // The painted scenery carries the scene. Small fixed pools, low-contrast light and
 // registered plant deformation add life behind the learning fish. All motion uses game time.

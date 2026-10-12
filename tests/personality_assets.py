@@ -9,7 +9,7 @@ OUT = Path('/tmp/popo-animation-review')
 OUT.mkdir(exist_ok=True)
 raw = (ROOT / 'src/personality-data.js').read_text()
 data = json.loads(raw.split('PopoGame.PERSONALITY_DATA = ', 1)[1].rstrip(';\n'))
-for actor, count in [('popo', 36), ('swiftee', 16)]:
+for actor, count in [('popo', 48), ('swiftee', 16), ('swiftee-front', 12)]:
     im = Image.open(ROOT / 'assets/sprites' / (actor + '-personality.png'))
     assert im.mode == 'RGBA'
     assert len(data[actor]['frames']) == count
@@ -27,7 +27,7 @@ with sync_playwright() as p:
     errors = []
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.goto((ROOT / 'asset/animation-polish/preview.html').as_uri())
-    page.wait_for_function('document.querySelectorAll("canvas").length === 10')
+    page.wait_for_function('document.querySelectorAll("canvas").length === 11')
     loops = page.evaluate('''() => Object.values(PopoAnimationClips).map(c => ({
       title:c.title, closed:c.frames[0]===c.frames.at(-1), valid:c.frames.every(f=>
         Number.isInteger(f)&&f>=0&&f<PopoGame.PERSONALITY_DATA[c.actor].frames.length),
@@ -45,5 +45,5 @@ with sync_playwright() as p:
     page.click('#background')
     page.screenshot(path=str(OUT / 'personality-dark.png'), full_page=True)
     assert not errors, errors
-    print('PASS 10 closed animation loops, preview controls, no browser errors', flush=True)
+    print('PASS 11 closed animation loops, preview controls, no browser errors', flush=True)
     browser.close()

@@ -1,7 +1,7 @@
 # Popo's Trapezium Fishing (part 2)
 
 The post-learning half of Popo's shape fishing. The learner has just studied trapeziums; now Popo
-fishes at the frozen lake and the learner catches trapezium fish across five levels (16 catches),
+rows round the frozen lake and the learner catches trapezium fish across five levels (16 catches),
 from spotting a trapezium to telling one by its angles. It follows "Trapezium Fishing Game —
 Designer & Developer Handoff" and keeps part 1's look, characters, controls and engine.
 
@@ -16,9 +16,18 @@ python3 -m http.server 8000
 ```
 
 The painted water runs through a per-pixel WebGL pass (waves, refraction, seaweed sway, light
-on the sand). The lake background is embedded as a data URL in `src/background-data.js` so the
-pass also works when the page is opened straight from the file system; without WebGL the
-painting is drawn plainly.
+on the sand). Opened straight from the file system, the title and the five lake backgrounds come
+from `src/background-data.js` as data URLs (WebGL may not read local files); served over HTTP they
+load from `assets/backgrounds/`, each only when it is needed. Without WebGL the painting is drawn
+plainly.
+
+Loading (`src/assets.js`, `src/main.js`): the banner and Play come first (about 350 KB), so the
+title shows within a second or two even on a slow phone connection; the rest of the art and the
+voices follow under a loading bar that tracks the bytes as they arrive. A tap on Play while
+loading is kept ("Get ready…") and the game starts the moment everything is in. Each sheet is
+decoded as it arrives, so its first frame on screen doesn't stall, and a file that fails gets
+one more try before the bar says so and offers Try again. The four big sheets ship as lossless
+WebP copies of their PNG masters (`tools/build-webp.py`; pixel-identical, about 45% smaller).
 
 Append `?debug` to the URL to expose `window.popoDebug = { state, game }` for testing.
 
@@ -29,9 +38,12 @@ away. Dev mode also exposes `window.popoDebug`.
 
 ## Deploy
 
-The folder is a static site. On Vercel, import the GitHub repository and deploy with no build
-command; `vercel.json` sets long cache headers for `assets/` and `.vercelignore` leaves the
-original artwork and tools out of the deployment.
+The folder is a static site, deployed on Vercel from the GitHub repository with no build command:
+every push to `main` goes live. `vercel.json` has browsers check `assets/` and `src/` with the
+server on each visit (a quick "not modified" when nothing changed), so a new deployment never
+leaves anyone with an old sprite sheet next to new code; the `?v=` on the art URLs moves past
+anything an older deployment told browsers to keep for a year. `.vercelignore` leaves the
+original artwork, the PNG masters, tools and tests out of the deployment.
 
 ## Layout
 
@@ -48,6 +60,8 @@ original artwork and tools out of the deployment.
 - `assets/` – the compressed WebP art the game loads, generated from `asset/`.
 - `tools/build-assets.py` – rebuilds `assets/` and `src/sprite-data.js` (needs Pillow).
 - `tools/build-voice.py` – records the voice-overs into `src/voice-data.js` (see Voice-overs).
+- `tools/build-webp.py` – writes the lossless WebP copies of the big PNG sheets that the game
+  loads (`build-personality.py` and `build-mishap.py` run it after rebuilding a sheet).
 - `tools/build-rowing.py` builds the articulated paddling rig (`src/rowing.js`,
   `src/rowing-data.js`, `assets/sprites/paddling/body.png` and `paddle.png`) from
   `asset/popo-paddling-rig-source.png`; `tools/build-rowing-cycle.py` then pre-renders one
@@ -56,48 +70,65 @@ original artwork and tools out of the deployment.
 
 ## Flow
 
-Title → **G0**: Popo rows in to his spot (honk honk, poof, ta-da) and Swiftee flies in from the
-lesson: "Great job!" "You know all about trapeziums!" "Now, let's help Popo catch some fish!" →
-level 1's fish swim in. The first time on a device, Swiftee adds the reminder ("Use the fishing
-rod to aim…" "…and drop the hook on the correct fish.") while a dashed ring circles the hook and
-the hand points at a fish to catch; after the first right catch it never shows again
-(`localStorage` `popo-fishing-learned`) → Swiftee flies off and fishing starts.
+Title → **G0**: Swiftee flies in from the lesson over the empty lake, facing the player: "Great
+job!" "You know all about trapeziums!" "Now, let's help Popo catch some fish!", and flies off →
+then Popo rows in to his spot (honk honk, poof, ta-da) → level 1's fish swim in. The first time on
+a device, Swiftee swoops back with the reminder ("Use the fishing rod to aim…" "…and drop the hook
+on the correct fish.") while a dashed ring circles the hook and the hand points at a fish to
+catch, then flies off again; after the first right catch it never shows again (`localStorage`
+`popo-fishing-learned`) → fishing starts.
 
-Tap a fish and Popo casts: the hook flies into its mouth. A right fish is reeled up and flips
-into the bucket and Popo says the level's line; a wrong one pulls Popo in (the wrong-answer
+Every level has its own place on the lake (`PLACES` in `src/levels.js`): Triangle Bay, Pentagon
+Cove, Hexagon Pass, Quadrilateral Waters, and the first bay seen from across the lake (a mirrored
+copy of its painting). Between levels Popo does a happy dance, then
+paddles on: the scenery pans to the next place with depth parallax while the raft surges with each
+stroke (part 1's rowing).
+
+Tap a fish and Popo casts: the hook flies into its mouth. A right fish is reeled in fighting the
+line (less as it tires; fish in the way dart clear), bursts out of the water, swings up on the line
+high over Popo's head and drops into the bucket behind its rim; the empty hook springs back to
+the rod and Popo says "Great catch!" or "Keep going!" (in turn); a wrong one pulls Popo in (the wrong-answer
 reaction below), then the instruction shows the level's hint and the narrator reads it. Every
 line is the handoff's wording, voiced, and shown word by word in time with the voice, with a boing
 on the stressed word; longer lines are split into short comic beats (one quick bubble each, with a
 breath between). The bubble grows word by word into its final shape, balanced over its lines. A
 bubble stays up after the voice ends long enough for a young reader (at least 0.9 s, about 130 ms
-a word). Between levels Popo does a happy dance under a "LEVEL 2!" burst before the next fish swim
-in. The tutorial hand taps the middle of the fish, pressing in on each tap with a ripple at the
+a word). The tutorial hand taps the middle of the fish, pressing in on each tap with a ripple at the
 fingertip.
 
-| Level | Instruction | Catches | Fish in the school | Markings | Right / hint |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Catch all the trapeziums! | 3 | 4, slow | parallel arrows | "Yes! One pair of parallel sides!" / "Look for parallel sides!" |
-| 2 | Catch the scalene trapeziums! | 3 | 4, slow–moderate | arrows, leg lengths ("5 units") | "The legs have different lengths!" / "Check the leg lengths!" |
-| 3 | Catch the isosceles trapeziums! | 3 | 4, moderate | arrows, matching or different leg ticks | "Both legs are equal!" / "Are the legs equal?" |
-| 4 | Catch the trapeziums with two right angles! | 3 | 5, moderate | arrows, right-angle squares | "Two right angles!" / "Look for two right angles!" |
-| 5 | Catch all the trapeziums! | 4 | 5, moderate | two angle arcs and degrees | "Yes!" "70° + 110° = 180°!" "That means a pair of parallel sides!" / "Add the marked angles!", and Popo: "Not a trapezium." "These angles don't add up to 180°!" "Try again!" |
+| Level | Place | Instruction | Catches | Fish in the school | Markings | Hint after a wrong catch |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Triangle Bay | Catch all the trapeziums! | 3 | 4, slow | parallel arrows | "Look for parallel sides!" |
+| 2 | Pentagon Cove | Catch the scalene trapeziums! | 3 | 4, slow–moderate | arrows, leg lengths ("5 units") | "Check the leg lengths!" |
+| 3 | Hexagon Pass | Catch the isosceles trapeziums! | 3 | 4, moderate | arrows, matching or different leg ticks | "Are the legs equal?" |
+| 4 | Quadrilateral Waters | Catch the right angle trapeziums! | 3 | 5, moderate | arrows, right-angle squares | "Look for two right angles!" |
+| 5 | Far Shore | Catch all the trapeziums! | 4 | 5, moderate | two angle arcs and degrees | "Add the marked angles!", and Popo: "Not a trapezium." "These angles don't add up to 180°!" "Try again!" |
 
 Each level's school holds a couple of fish to catch among distractors; after a catch another
 fish to catch swims in while the level needs more, and distractors keep it from thinning out
-(`school`, `targets` and `least` in `LEVELS`). Fish swim in briskly from either side, usually
-turn back at the edges, and one still to catch is always in sight. Colour never tells a catch
-from a distractor.
+(`school`, `targets` and `least` in `LEVELS`). Fish swim in briskly, come back on the side they
+left from (at a depth that's clear there, or a moment later), usually turn back at the edges, and
+one still to catch is always in sight. They never swim into each other: there's room for two or
+three at different depths, so fish sharing a depth keep apart along it (one catching up follows,
+one meeting another head-on turns away in good time) and only wander to a clear depth. Colour
+never tells a catch from a distractor. Level 2's distractors are isosceles (right trapeziums have
+unequal legs too, so they would look scalene), and right angles appear only in level 4.
 
-Before level 5 (once): **G5.1** Swiftee: "Remember," "angles on the same leg of a trapezium…"
-"add up to 180°!" A card follows her words: the trapezium on "Remember", the leg lighting up and a
-coloured piece popping into the 70° and the 110° corner on "leg", and on "180°" the two pieces fly
-out and snap together on a straight line before "70° + 110° = 180°" bounces in. **G5.2**
-level 5's fish swim to their places and stop; Swiftee: "Look at the marked angles!"; then
-"Step 1: Observe (2 seconds)" with fishing off, and the fish swim on. A right catch in level 5
-shows its parallel arrows as it is hooked.
+Before level 5 (once): **G5.1** something tugs Popo's line (the hook dips, a "!" pops up, the raft
+wobbles with a soft boing), then Swiftee flies in and a card follows her words: it fades up and
+traces its trapezium round the real edges, then fills in; "Look! These two sides are parallel!"
+(gold runs along the parallel pair, measured from the shape); "Remember," "angles on the same leg
+of a trapezium…" (the leg lights pink and each angle opens round its corner, its number popping
+with a soft tick); "add up to 180°!" (the two pieces fly out and snap together on a straight line
+before "70° + 110° = 180°" bounces in); "Yay! Shape detective!" (a chime, sparkles at the angles,
+Swiftee hops and Popo cheers). Swiftee keeps still while she explains. **G5.2**
+one of level 5's fish swims into the middle as Swiftee says "Look at the marked angles!", and its
+two angles glow on "angles!"; then the others swim to their places round it; then two seconds just to
+look (no text, fishing off), and the fish swim on. A right catch in level 5 shows its parallel
+arrows as it is hooked.
 
-**G6** after the sixteenth catch: the last fish swim off, all sixteen leap one after another
-over Popo into his bucket, Popo: "Wow!" "What a catch!", and Swiftee: "You did it!".
+**G6** after the sixteenth catch: the last fish swim off, Popo dances: "Wow!" "What a catch!", and
+Swiftee: "You did it!".
 
 Then a cartoon gag, played big: a giant shadow glides under the raft (dun, dun, DUNNN, and the
 edges darken), Popo: "Whoa! A giant fish!" while Swiftee flutters to a perch beside him to
@@ -106,8 +137,9 @@ and up it bursts in slow motion (SPLOOSH!)... a huge old boot dripping seaweed, 
 stuck on its toe. Swiftee: "Eek!", Popo: "Huh?!", Swiftee: "Good catch, Popo!" They both crack
 up ("Ha ha ha!" "Hee hee hee!"), Popo lets go, the boot plops back in (SPLASH!) and Swiftee
 flutters back beside him. The end is a Tom and Jerry iris: Swiftee snuggles in beside Popo, the
-iris closes on the two of them and glides to the middle of the screen, sized to frame them whole,
-where they keep laughing in a warm sunburst under "The End", with a **Next** button. Next
+iris closes in place on the two of them, then glides to the middle of the screen carrying the live
+scene with it (the scene slides under the curtain layer, so the circle never shows anything but
+the game), where they keep laughing in a warm sunburst under "The End", with a **Next** button. Next
 shuts the iris, dispatches a `popo:complete` event (`{ catches: 16, levels: 5 }`, also posted to
 a hosting page) and returns to the title.
 
@@ -126,8 +158,9 @@ dots, waves, stripes, diamonds and hearts, gloss, outline, rosy cheek, big eye a
 swaying tail and fluttering fins. They blink, watch the hook while Popo casts and gasp when
 startled or hooked; nothing ever stretches the body. Markings are printed on the fish in its own
 palette: white arrows, ticks, right-angle corners and arcs edged in the body's dark tone, a
-lighter tint of the body inside each marked angle, and bold white numbers ("5 units", "70°")
-beside the side or inside the angle they measure. They turn and mirror with the body while the
+lighter tint of the body inside each marked angle, and bold white numbers: a length ("5 units")
+written along its own leg, at the middle just inside it, the way a ruler laid on that side reads;
+an angle ("70°") inside its corner. They turn and mirror with the body while the
 numbers stay upright; numbers grow on small screens (`LABEL` in `src/fish.js`), where the whole
 fish is also drawn 15% larger, and the face keeps clear of every marking.
 
@@ -145,11 +178,14 @@ Python Playwright with its Chromium (`pip install playwright && playwright insta
 - `python3 tests/asset_alpha.py` – the mishap art's transparency.
 - `python3 tests/voice.py` – every line the game can say has a recorded clip.
 - `python3 tests/stress.py` – rapid taps, pause/resume, restarts mid-scene, CPU throttling, slow loading.
+- `python3 tests/loading.py` – the WebP copies match their PNGs; on a slow connection the title
+  shows first, the bar fills, an early Play starts the game once loaded, only needed files are
+  fetched, and a failed file offers Try again.
 
 ## Voice-overs
 
-All 42 lines part 2 can say (the story, each level's instruction and hint, Popo's right- and
-wrong-catch lines, level 5's sums for each of its trapeziums, and the big-catch gag) are recorded with Kokoro in part 1's
+All 36 lines part 2 can say (the story, each level's instruction and hint, Popo's right- and
+wrong-catch lines, "Great catch!" and "Keep going!", and the big-catch gag) are recorded with Kokoro in part 1's
 voices; `LINES` in `tools/build-voice.py` lists them, and symbols are read as words ("70° + 110° =
 180°" as "70 degrees plus 110 degrees equals 180 degrees"). Each word appears as it is spoken and
 the recall card's steps follow the voice. `python3 tests/voice.py` checks that every line the game
@@ -209,7 +245,7 @@ voice blips. Raw recordings are kept in `asset/voice/`.
   its smile is measured so the hook lands in its mouth.
 - Each background gets a water mask: the surface waves move only open water, so the sky,
   mountains, ice shelves and icebergs stay still. The seaweed sway stops at the plant tips.
-- The title banner, "Fishing Frenzy" (`asset/title-banner.png`), and play button (`asset/play-button.png`) are built
+- The title banner, "Fishing Frenzy" (`asset/title-banner.png`, nothing swims over it), and play button (`asset/play-button.png`) are built
   into `assets/` and embedded as data URLs so the canvas can use them from the file system.
 - No audio files were supplied; music and effects are synthesised with the Web Audio API.
 
@@ -292,14 +328,14 @@ The dialogue text is stored in `STORY.wrong` in `src/levels.js`.
 ## Character personality pack (12 October 2026)
 
 The complete art pack was generated and checked before gameplay integration. Open
-`asset/animation-polish/preview.html` directly to review ten looping clips, with pause,
-speed and background controls. The 52 source poses cover Popo's idle/blink, talking,
+`asset/animation-polish/preview.html` directly to review eleven looping clips, with pause,
+speed and background controls. The 76 source poses cover Popo's idle/blink, talking,
 catch celebration, reeling effort, short wobble, finale dance and wet recovery, plus
 Swiftee's expressions, teaching gestures and celebration.
 
 - Original built-in image generation outputs and exact prompts:
   `asset/animation-polish/{popo-source.png,swiftee-source.png,prompts.txt}`.
-- Runtime transparent atlases: `assets/sprites/popo-personality.png` (36 frames) and
+- Runtime transparent atlases: `assets/sprites/popo-personality.png` (48 frames) and
   `assets/sprites/swiftee-personality.png` (16 frames).
 - Registration metadata: `src/personality-data.js`. Rebuild with
   `python3 tools/build-personality.py` (Python Playwright and Chromium).
@@ -325,3 +361,19 @@ loops; `python3 tests/personality.py` covers pause, rod/raft registration, repea
 retries, restart cancellation and a subsequent catch on desktop, mobile and reduced-motion
 layouts. Existing `tests/mishap.py`, `tests/rowing.py` and `tests/playthrough.py` exercise
 the established sequences. Preview screenshots are written to `/tmp/popo-animation-review`.
+
+
+The completion pass adds a 12-pose front-facing Swiftee flight atlas at
+`assets/sprites/swiftee-front-personality.png`: eight wingbeat poses and four speaking
+poses. During the welcome and reminder Swiftee looks at the player; departure, teaching
+and later story gestures retain their existing direction handling. Intro twirl cues become
+small hops to preserve eye contact. `tests/swiftee_front.py` verifies the intro, pause,
+restart and playable handoff on desktop/mobile/reduced-motion layouts.
+
+Popo now also has the missing hook glance, raised eyebrow, dedicated laughing face,
+anticipation, single fist pump, proud grin, bucket look and double take. Idle uses six
+distinct poses; catch and finale use eight each, with a repeated neutral endpoint. The
+bucket-look pose faces left toward the bucket in both preview and gameplay. The updated
+idle gesture plays with the idle hint, keeping the original rod-gripping art for fishing.
+New source sheets and exact built-in imagegen prompts are retained in
+`asset/animation-polish/{swiftee-front-source.png,popo-completion-source.png,completion-prompts.txt}`.

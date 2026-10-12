@@ -1,8 +1,7 @@
 """Voice-over coverage: python3 tests/voice.py.
 
-Lists every line the game can speak (the story, each level's instruction, hint, wrong-catch line
-and right-catch beats, with level 5's lines for each of its trapeziums) straight from the game's
-own data in headless Chromium, and checks that each has a recorded clip in src/voice-data.js,
+Lists every line the game can speak (the story, and each level's instruction, hint and wrong-catch
+beats) straight from the game's own data in headless Chromium, and checks that each has a recorded clip in src/voice-data.js,
 that every clip belongs to a line, and that tools/build-voice.py lists exactly those lines.
 """
 import importlib.util
@@ -13,7 +12,7 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 
 LINES = r'''() => {
-  const { STORY, LEVELS, FISH, ShapeFish, PALETTE } = PopoGame;
+  const { STORY, LEVELS } = PopoGame;
   const out = [];
   const add = (who, text) => out.push([who, text]);
   for (const line of Object.values(STORY).flatMap((v) => (typeof v === 'string' ? [] : [].concat(v)))) add(line.who, line.text);
@@ -21,10 +20,6 @@ LINES = r'''() => {
     add('narrator', level.instruction);
     add('narrator', level.hint);
     for (const text of [].concat(level.oops || [])) add('popo', text);
-    for (const spec of FISH.filter((f) => f.level === i + 1 && f.correct)) {
-      const fish = new ShapeFish(spec, level, { colour: PALETTE[0] });
-      for (const text of [].concat(level.right(fish.markedAngles))) add('popo', text);
-    }
   });
   const key = (who, text) => `${who}:${text.replace(/\*/g, '').replace(/…/g, '...').replace(/’/g, "'").split(/\s+/).filter(Boolean).join(' ')}`.toLowerCase();
   const keys = [...new Set(out.map(([w, t]) => key(w, t)))];

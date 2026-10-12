@@ -1,6 +1,6 @@
 (function (PopoGame) {
 'use strict';
-const { loadCoreAssets, AudioEngine, Game, Stage, state, PHASE, UI } = PopoGame;
+const { assets, loadTitle, loadCoreAssets, AudioEngine, Game, Stage, state, PHASE, UI } = PopoGame;
 
 const stage = new Stage(document.getElementById('stage'), document.getElementById('world'));
 const ui = new UI();
@@ -51,12 +51,28 @@ if (params.has('debug') || params.get('dev') === '1') {
   window.popoDebug = { state, game };
 }
 
-ui.setLoading('Loading…');
-Promise.all([loadCoreAssets(), audio.prepareVoices(PopoGame.VOICE_DATA)])
+// The speech bubbles are measured in the game's font, so it should be in before the story starts
+// (but a slow font never holds the game up for long).
+const fontReady = () => (document.fonts && document.fonts.load
+  ? Promise.race([document.fonts.load('600 20px Fredoka').catch(() => {}), new Promise((r) => setTimeout(r, 3000))])
+  : Promise.resolve());
+
+// The title comes first and plays while the rest arrives under a loading bar; a tap on Play
+// before then is kept, and the game begins the moment everything is in.
+ui.setLoading(0);
+loadTitle()
   .then(() => {
-    ui.setLoading('');
-    game.popo.rowTint(); // decode the paddling frames now, not on the first stroke
+    ui.showTitle();
     game.showIdleScene();
+    return loadCoreAssets((k) => ui.setLoading(k));
   })
-  .catch((err) => ui.setLoading(`Could not load the game art (${err.message}).`));
+  .then(() => Promise.all([audio.prepareVoices(PopoGame.VOICE_DATA), fontReady()]))
+  .then(() => {
+    game.popo.rowTint(); // decode the paddling frames now, not on the first stroke
+    assets.ready = true;
+    ui.setLoading(1);
+    ui.loaded();
+    if (game.playQueued) game.pressPlay();
+  })
+  .catch(() => ui.loadFailed());
 })(window.PopoGame = window.PopoGame || {});

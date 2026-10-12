@@ -41,7 +41,7 @@ with sync_playwright() as p:
     page.on('pageerror', lambda e: errors.append(str(e)))
     page.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
     page.goto(URL)
-    until(page, '() => !document.getElementById("btn-play").disabled')
+    until(page, '() => PopoGame.assets.ready')
     snap = lambda: page.evaluate(SNAP)
 
     # rapid taps: twenty taps on one fish while it is cast at, reeled and collected

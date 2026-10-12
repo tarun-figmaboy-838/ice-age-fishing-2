@@ -35,9 +35,10 @@ const { MISHAP_POSES } = PopoGame;
 // Held drawings plus continuous body motion give crisp acting without double-image fades.
 // Every clip starts and ends on its registered neutral pose.
 const ACTING = {
-  catch: { frames: [0, 7, 8, 9, 10, 0], holds: [100, 100, 130, 230, 180, 130] },
+  idle: { frames: [0, 1, 2, 1, 37, 38, 47, 0], holds: [120, 45, 85, 45, 300, 250, 120, 120] },
+  catch: { frames: [0, 40, 41, 8, 42, 9, 43, 47, 0], holds: [80, 90, 100, 100, 180, 140, 180, 100, 100] },
   wobble: { frames: [0, 19, 20, 21, 22, 23, 0], holds: [90, 100, 120, 150, 130, 230, 120] },
-  dance: { frames: [0, 25, 26, 27, 28, 27, 26, 29, 0], holds: [120, 120, 180, 170, 170, 170, 180, 120, 140] },
+  dance: { frames: [0, 44, 45, 46, 26, 27, 28, 47, 0], holds: [100, 260, 180, 120, 180, 170, 170, 140, 120] },
   wet: { frames: [0, 30, 31, 32, 31, 32, 33, 34, 0], holds: [60, 100, 90, 90, 90, 90, 200, 220, 120] },
   // a belly laugh: arms up, eyes squeezed shut, rocking back and forth
   laugh: { frames: [0, 26, 27, 28, 27, 28, 27, 28, 27, 26, 0], holds: [80, 120, 130, 130, 130, 130, 130, 130, 130, 160, 120] },
@@ -57,9 +58,6 @@ class Popo {
   constructor() {
     this.anchor = { x: 238, y: 400 };
     this.pose = { sheet: 'fishing', frame: 'idle' };
-    this.prevPose = null;
-    this.fade = 1;
-    this.fadeMs = 120;
     this.anim = null;
     this.bobT = Math.random() * TAU;
     this.tilt = 0;
@@ -84,22 +82,16 @@ class Popo {
     this.anchor.y = y;
   }
 
-  // fadeMs 0 is a hard cut, used inside an animation so frames never double-expose.
-  setPose(sheet, frame, fadeMs = 120) {
+  // Every change of pose is a clean cut: each drawing holds the rod somewhere else, so a cross-fade
+  // between two would show two rods.
+  setPose(sheet, frame) {
     if (sheet !== 'fishing') this.acting = null;
-    if (this.pose.sheet === sheet && this.pose.frame === frame) return;
-    // The personality drawings and the sheet frames are different art: blending from one to the
-    // other would flash a second, differently drawn Popo (and a second rod), so cut instead.
-    if (this.actorFrame() !== null) fadeMs = 0;
-    this.prevPose = fadeMs > 0 ? this.pose : null;
     this.pose = { sheet, frame };
-    this.fade = fadeMs > 0 ? 0 : 1;
-    this.fadeMs = Math.max(1, fadeMs);
   }
 
   playFrames(sheet, frames, frameMs, loop = false) {
     this.anim = { sheet, frames, frameMs, loop, t: 0, index: 0 };
-    this.setPose(sheet, frames[0], 80);
+    this.setPose(sheet, frames[0]);
   }
 
   stopFrames() {
@@ -110,13 +102,14 @@ class Popo {
   idle() {
     this.rowing = null;
     this.anim = null;
-    this.setPose('fishing', 'idle', 140);
+    this.setPose('fishing', 'idle');
   }
 
   // A looped clip keeps playing (rod down) until another clip or the idle pose replaces it.
   act(name, loop = false) {
     const clip = ACTING[name];
     if (!clip || this.mishap || this.rowing) return;
+    if (loop && this.acting && this.acting.loop && this.acting.name === name) return; // already going
     this.acting = { name, t: 0, loop, duration: clip.holds.reduce((a, b) => a + b, 0) / 1000 };
   }
 
@@ -125,7 +118,7 @@ class Popo {
   actorFrame() {
     if (!assets.popoPersonality || this.mishap || this.rowing || !this.acting || this.pose.sheet !== 'fishing') return null;
     const clip = ACTING[this.acting.name];
-    if (this.reduced) return { catch: 10, wobble: 23, dance: 26, wet: 34, laugh: 28, giggle: 28 }[this.acting.name];
+    if (this.reduced) return { idle: 38, catch: 43, wobble: 23, dance: 26, wet: 34, laugh: 28, giggle: 28 }[this.acting.name];
     let at = this.acting.t * 1000;
     for (let i = 0; i < clip.frames.length; i++) {
       if (at < clip.holds[i]) return clip.frames[i];
@@ -166,6 +159,7 @@ class Popo {
     const breath = this.reduced ? 0 : Math.sin(this.actorTime * 2.2) * .005;
     const [sx, sy, sw, sh] = data.frames[frame].box;
     ctx.save();ctx.translate(o.x, o.y);ctx.scale(1 - breath * .35, 1 + breath);
+    if (frame === 44) ctx.scale(-1, 1); // glance into the bucket on his left before the double take
     ctx.drawImage(assets.popoPersonality, sx, sy, sw, sh, -128*k, -236*k, 256*k, 256*k);
     ctx.restore();
   }
@@ -194,7 +188,6 @@ class Popo {
     }
     this.bobT += dt * 1.1;
     this.swayT += dt * 1.6;
-    if (this.fade < 1) this.fade = Math.min(1, this.fade + (dt * 1000) / this.fadeMs);
 
     if (this.anim) {
       const a = this.anim;
@@ -203,10 +196,10 @@ class Popo {
         a.t -= a.frameMs;
         if (a.index < a.frames.length - 1) {
           a.index += 1;
-          this.setPose(a.sheet, a.frames[a.index], 0);
+          this.setPose(a.sheet, a.frames[a.index]);
         } else if (a.loop) {
           a.index = 0;
-          this.setPose(a.sheet, a.frames[0], 0);
+          this.setPose(a.sheet, a.frames[0]);
         } else {
           this.anim = null;
         }
@@ -288,13 +281,7 @@ class Popo {
       return this.transformPoint(r.x+dx*Math.cos(r.angle)-dy*Math.sin(r.angle),
         r.y+dx*Math.sin(r.angle)+dy*Math.cos(r.angle));
     }
-    const cur = this.placement(this.pose.sheet, this.pose.frame).tip;
-    let tip = cur;
-    if (this.fade < 1 && this.prevPose) {
-      const prev = this.placement(this.prevPose.sheet, this.prevPose.frame).tip;
-      if (prev && cur) tip = { x: prev.x + (cur.x - prev.x) * this.fade, y: prev.y + (cur.y - prev.y) * this.fade };
-      else tip = cur || prev;
-    }
+    const tip = this.placement(this.pose.sheet, this.pose.frame).tip;
     if (!tip) return null;
     return this.transformPoint(tip.x, tip.y);
   }
@@ -319,20 +306,14 @@ class Popo {
     this.applyTransform(ctx);
     this.drawRaftProp(ctx);
     const actorFrame = this.actorFrame();
-    if (actorFrame !== null) {
-      this.drawActor(ctx, actorFrame);
-    } else if (this.fade < 1 && this.prevPose) {
-      this.drawPose(ctx, this.prevPose, 1 - this.fade);
-      this.drawPose(ctx, this.pose, this.fade);
-    } else {
-      this.drawPose(ctx, this.pose, 1);
-    }
+    if (actorFrame !== null) this.drawActor(ctx, actorFrame);
+    else this.drawPose(ctx, this.pose);
     ctx.restore();
   }
 
   startRowing(cycleMs = 2100) {
     this.stopFrames();
-    this.setPose('fishing', 'idle', 0);
+    this.setPose('fishing', 'idle');
     this.rowRig = this.rowRig || new PopoGame.PaddleRig(null, null, PopoGame.ROWING_RIG);
     this.rowing = { time: 0, cycleMs };
   }
@@ -390,11 +371,9 @@ class Popo {
     ctx.save();ctx.beginPath();ctx.rect(0,0,PopoGame.STAGE_W,waterline);ctx.clip();drawFigure(assets.rowCycle);ctx.restore();
   }
 
-  drawPose(ctx, pose, alpha) {
+  drawPose(ctx, pose) {
     const p = this.placement(pose.sheet, pose.frame);
-    ctx.globalAlpha = alpha;
     ctx.drawImage(p.img, p.sx, p.sy, p.sw, p.sh, p.dx, p.dy, p.dw, p.dh);
-    ctx.globalAlpha = 1;
   }
 
   // The idle body and rod are complementary masks of the ORIGINAL fishing frame.
@@ -437,8 +416,6 @@ class Popo {
     this.prepareMishapArt();
     this.stopFrames();
     this.pose = { sheet: 'fishing', frame: 'idle' };
-    this.prevPose = null;
-    this.fade = 1;
     this.mishap = {
       x: 0, y: 0, angle: 0, raftAngle: 0, rodBend: 0,
       waterline, bob: this.bob, rod: null, pose: 'idle', nextPose: 'idle', mix: 0,
@@ -596,8 +573,6 @@ class Popo {
     this.rowing = null;
     this.tilt = this.lean = this.dip = this.squash = 0;
     this.pose = { sheet: 'fishing', frame: 'idle' };
-    this.prevPose = null;
-    this.fade = 1;
     this.anim = null;
     this.line.mode = 'dangle';
     this.line.arc = this.line.tension = 0;

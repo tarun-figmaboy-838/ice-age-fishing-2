@@ -7,16 +7,18 @@
   <title>Fishing Frenzy</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap"></noscript>
   <link rel="stylesheet" href="src/styles.css">
 </head>
 <body>
   <div id="app" class="app">
-    <div id="stage" class="stage">
+    <div id="stage" class="stage booting">
       <div id="scene" class="scene" aria-hidden="true">
         <canvas id="water" class="layer"></canvas>
         <canvas id="world" class="layer"></canvas>
       </div>
+      <canvas id="curtain" class="layer curtain" aria-hidden="true"></canvas>
 
       <div id="hits" class="hits"></div>
       <img id="hand" class="hand" src="assets/sprites/hint-hand.webp" alt="" hidden aria-hidden="true">
@@ -50,15 +52,19 @@
 
       <section id="screen-start" class="screen start" aria-labelledby="game-title">
         <h1 id="game-title" class="sr-only">Fishing Frenzy</h1>
-        <button id="btn-play" class="play-hit" type="button" aria-label="Play"></button>
-        <p id="loading" class="loading" role="status">Loading…</p>
+        <button id="btn-play" class="play-hit" type="button" aria-label="Play" disabled></button>
+        <div id="loading" class="loader" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span class="bobber" aria-hidden="true"></span>
+          <span class="loader-bar" aria-hidden="true"><span class="loader-fill"></span></span>
+          <span id="loading-text" class="loader-text">Loading…</span>
+          <button id="btn-retry" class="btn primary" type="button" hidden>Try again</button>
+        </div>
       </section>
     </div>
     <div id="rotate-hint" class="rotate-hint" hidden>Rotate your device for the best experience</div>
   </div>
   <script src="src/sprite-data.js" defer></script>
   <script src="src/personality-data.js" defer></script>
-  <script src="src/background-data.js" defer></script>
   <script src="src/geometry.js" defer></script>
   <script src="src/levels.js" defer></script>
   <script src="src/state.js" defer></script>
@@ -74,7 +80,6 @@
   <script src="src/popo.js" defer></script>
   <script src="src/fish.js" defer></script>
   <script src="src/swiftee.js" defer></script>
-  <script src="src/voice-data.js" defer></script>
   <script src="src/audio.js" defer></script>
   <script src="src/ui.js" defer></script>
   <script src="src/sequences.js" defer></script>

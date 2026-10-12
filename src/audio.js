@@ -326,6 +326,10 @@ class AudioEngine {
       case 'thump': this.tone({ freq: 140, to: 60, type: 'sine', dur: 0.22, gain: 0.22 }); this.noise({ dur: 0.12, type: 'lowpass', freq: 900, to: 200, gain: 0.25 }); break;
       // the line straining: a wobbling creak
       case 'creak': this.tone({ freq: 520, to: 380, type: 'sawtooth', dur: 0.32, gain: 0.025 }); this.tone({ freq: 545, to: 395, type: 'sawtooth', dur: 0.32, gain: 0.02 }); break;
+      // a soft tick as a measurement appears
+      case 'tick': this.tone({ freq: 1800, to: 1400, type: 'sine', dur: 0.05, gain: 0.07 }); break;
+      // a gentle two-note chime
+      case 'chime': this.bell(1318.5, now, 0.08); this.bell(1568, now + 0.16, 0.08); break;
       // the cartoon iris closing: a slide whistle down
       case 'iris': this.tone({ freq: 1400, to: 260, type: 'sine', dur: 0.75, gain: 0.08 }); break;
       default: break;

@@ -25,6 +25,8 @@ with sync_playwright() as p:
         page.wait_for_function('window.PopoGame.assets.rowCycle')
         page.evaluate(BOOT)
         page.evaluate('()=>{popoDebug.game.reset();PopoGame.opening(popoDebug.game)}')
+        # Swiftee welcomes the learner first, then Popo rows in
+        page.evaluate('async()=>{for(let i=0;i<300&&!popoDebug.game.popo.rowing;i++)await step(100);}')
         page.evaluate('step(300)')
         assert page.evaluate('!!popoDebug.game.popo.rowing && !popoDebug.game.ui.hitsEnabled')
         assert page.evaluate('''()=>{const p=popoDebug.game.popo;return JSON.stringify(p.rowRig.sample(0))===JSON.stringify(p.rowRig.sample(2100))}''')
@@ -44,13 +46,14 @@ with sync_playwright() as p:
         # a restart mid-entrance starts it over and still leaves Popo on his spot
         page.evaluate('step(100)')
         page.evaluate('()=>{popoDebug.game.restart()}')
-        page.evaluate('step(400)')
+        page.evaluate('async()=>{for(let i=0;i<300&&!popoDebug.game.popo.rowing;i++)await step(100);}')
         assert page.evaluate('!!popoDebug.game.popo.rowing')
         page.evaluate('popoDebug.game.restart()')
-        page.evaluate('step(6000)')
+        # he rows in again after the welcome and ends up on his spot
+        page.evaluate('async()=>{const p=popoDebug.game.popo;for(let i=0;i<300&&!p.rowing;i++)await step(100);for(let i=0;i<100&&p.rowing;i++)await step(100);await step(2000);}')
         assert page.evaluate('!popoDebug.game.popo.rowing && popoDebug.game.popo.travelShift===0')
         assert not errors,errors
         print(width,height,fps,result,flush=True)
         page.close()
     browser.close()
-print('PASS: nine alpha frames, margins, periodic rig, entrance at 15/30/60 FPS, pause, resize, sound, restart.')
+print('PASS: nine alpha frames, margins, periodic rig, entrance after Swiftee at 15/30/60 FPS, pause, resize, sound, restart.')

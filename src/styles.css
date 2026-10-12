@@ -39,7 +39,10 @@ html, body {
   position: relative;
   overflow: hidden;
   container-type: inline-size;
-  font-size: max(calc(var(--scale, 1) * 10px), 6.2px);
+  /* sized by stage.js; the same fit in CSS covers the moment before the scripts arrive */
+  width: min(100vw, calc(100vh * 1672 / 941));
+  height: min(100vh, calc(100vw * 941 / 1672));
+  font-size: max(var(--em, min(calc(100vw / 167.2), calc(100vh / 94.1))), 6.2px);
   border-radius: 0.6em;
   box-shadow: 0 2em 6em rgba(0, 0, 0, 0.35);
 }
@@ -49,11 +52,15 @@ html, body {
   inset: 0;
   transition: filter 0.45s ease;
 }
+/* nothing is painted until the banner arrives; the loader sits on the page's blue meanwhile */
+.booting .scene { visibility: hidden; }
 .layer {
   position: absolute;
   inset: 0;
   display: block;
 }
+/* the end's iris and title, above the scene (which slides underneath) */
+.curtain { pointer-events: none; z-index: 2; }
 
 /* ---------- fish hit targets ---------- */
 .hits { position: absolute; inset: 0; pointer-events: none; }
@@ -324,7 +331,80 @@ html, body {
 .play-hit:focus { outline: none; }
 .play-hit:focus-visible { box-shadow: 0 0 0 0.4em #fff, 0 0 0 0.8em var(--amber); }
 .play-hit:disabled { cursor: default; }
-.start .loading { position: absolute; left: 50%; bottom: 3%; transform: translateX(-50%); }
+/* Loading: a bobbing float and a bar in the middle until the banner shows, then just the bar
+   along the bottom while the rest of the art arrives. */
+.loader {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.6em;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.5s ease, visibility 0.5s;
+  pointer-events: none;
+}
+.titled .loader { top: auto; bottom: 2.2em; gap: 0.8em; transform: translateX(-50%); }
+.loader.done { opacity: 0; visibility: hidden; }
+.bobber {
+  position: relative;
+  width: 6em;
+  height: 6em;
+  margin-top: 2.6em;
+  border: 0.45em solid #14284b;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #ff5a4f 0 50%, #fff8ec 50% 100%);
+  box-shadow: inset -0.7em -0.7em 0 rgba(0, 0, 0, 0.12), 0 0.5em 0 rgba(0, 0, 0, 0.18);
+  animation: bob 1.4s ease-in-out infinite;
+}
+.bobber::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  width: 0.7em;
+  height: 2.4em;
+  margin-left: -0.35em;
+  border-radius: 0.35em;
+  background: #14284b;
+}
+.titled .bobber { display: none; }
+@keyframes bob {
+  0%, 100% { transform: translateY(0) rotate(-7deg); }
+  50% { transform: translateY(0.9em) rotate(7deg); }
+}
+.loader-bar {
+  width: 36em;
+  height: 2em;
+  padding: 0.3em;
+  border: 0.3em solid #fff8ec;
+  border-radius: 1.3em;
+  background: rgba(8, 36, 84, 0.6);
+  box-shadow: 0 0.5em 0 rgba(0, 0, 0, 0.2);
+}
+.titled .loader-bar { width: 28em; height: 1.7em; }
+.loader-fill {
+  display: block;
+  width: calc(var(--p, 0) * 100%);
+  min-width: 0.8em;
+  height: 100%;
+  border-radius: 0.8em;
+  background: linear-gradient(180deg, #ffe08a, #f08a1d);
+  transition: width 0.35s ease-out;
+}
+.loader.waiting .loader-fill { animation: glow 0.9s ease-in-out infinite alternate; }
+@keyframes glow { to { filter: brightness(1.25); } }
+.loader-text {
+  font-size: 2.6em;
+  font-weight: 600;
+  color: #fff8ec;
+  text-shadow: 0 0.08em 0 rgba(0, 0, 0, 0.35);
+}
+.titled .loader-text { font-size: 2em; }
+.loader.failed { pointer-events: auto; }
+.loader.failed .bobber { animation: none; }
+.loader.failed .loader-bar { display: none; }
 .sr-only {
   position: absolute;
   width: 1px;
@@ -333,7 +413,6 @@ html, body {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
-.loading { font-size: 2em; color: #ffe8bd; min-height: 1.4em; margin: 0.5em 0 0; }
 
 .rotate-hint {
   position: fixed;
@@ -358,6 +437,6 @@ html, body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hand, .speech.pop, .next-btn { animation: none; }
+  .hand, .speech.pop, .next-btn, .bobber, .loader.waiting .loader-fill { animation: none; }
   .scene { transition: none; }
 }

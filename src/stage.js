@@ -12,6 +12,8 @@ class Stage {
     this.root = root;
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
+    this.curtain = root.querySelector('#curtain');
+    this.curtainCtx = this.curtain.getContext('2d');
     this.scale = 1;
     this.dpr = 1;
     this.portrait = false;
@@ -29,11 +31,13 @@ class Stage {
     this.dpr = Math.min(2, window.devicePixelRatio || 1);
     this.root.style.width = `${w}px`;
     this.root.style.height = `${h}px`;
-    this.root.style.setProperty('--scale', scale);
-    this.canvas.width = Math.round(w * this.dpr);
-    this.canvas.height = Math.round(h * this.dpr);
-    this.canvas.style.width = `${w}px`;
-    this.canvas.style.height = `${h}px`;
+    this.root.style.setProperty('--em', `${scale * 10}px`);
+    for (const c of [this.canvas, this.curtain]) {
+      c.width = Math.round(w * this.dpr);
+      c.height = Math.round(h * this.dpr);
+      c.style.width = `${w}px`;
+      c.style.height = `${h}px`;
+    }
   }
 
   // Resets the transform so drawing code can use logical coordinates.
@@ -41,6 +45,12 @@ class Stage {
     const k = this.dpr * this.scale;
     this.ctx.setTransform(k, 0, 0, k, 0, 0);
     return this.ctx;
+  }
+
+  beginCurtain() {
+    const k = this.dpr * this.scale;
+    this.curtainCtx.setTransform(k, 0, 0, k, 0, 0);
+    return this.curtainCtx;
   }
 
   toStage(clientX, clientY) {

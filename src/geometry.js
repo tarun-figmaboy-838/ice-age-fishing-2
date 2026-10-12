@@ -41,11 +41,6 @@ function angled({ bottom, side, angles: [atD, atA, atC] }) {
   return [[0, 0], c, add(a, mul(top, t)), a];
 }
 
-// ∠D and ∠C at the two ends of the bottom side DC, with the left and right sides' lengths.
-function based({ bottom, angles: [atD, atC], sides: [left, right] }) {
-  return [[0, 0], [bottom, 0], add([bottom, 0], mul(heading(180 - atC), right)), mul(heading(atD), left)];
-}
-
 // A kite along a horizontal axis: tail tip, bottom, nose, top. back !== front keeps it from
 // being a rhombus.
 function kite({ back, front, half }) {
@@ -132,21 +127,6 @@ function inward(px, i) {
 // The half-width of a box measured across a line with unit normal n.
 const reach = (n, hw, hh) => hw * Math.abs(n[0]) + hh * Math.abs(n[1]);
 
-// A label box inside the body against side i, clear of the side line: at the side's middle, or
-// slid along it as little as possible to stay inside the body, clear of the `avoid` circles and
-// of the labels already placed.
-function besideSide(px, i, hw, hh, gap, avoid = [], placed = []) {
-  const [p, q] = [px[i], px[(i + 1) % px.length]];
-  const n = inward(px, i);
-  const at = (t) => add(add(p, mul(sub(q, p), t)), mul(n, reach(n, hw, hh) + gap));
-  const fits = (c) => [[-1, -1], [1, -1], [1, 1], [-1, 1]].every(([sx, sy]) => inside(px, [c[0] + sx * hw, c[1] + sy * hh]))
-    && avoid.every(({ at: a, r }) => Math.hypot(Math.max(Math.abs(a[0] - c[0]) - hw, 0), Math.max(Math.abs(a[1] - c[1]) - hh, 0)) >= r)
-    && placed.every((l) => Math.abs(l.at[0] - c[0]) > l.hw + hw + 4 || Math.abs(l.at[1] - c[1]) > l.hh + hh + 4);
-  for (let d = 0; d <= 0.42; d += 0.02) {
-    for (const t of [0.5 - d, 0.5 + d]) if (fits(at(t))) return at(t);
-  }
-  return at(0.5);
-}
 
 // Unit vectors from corner i along its two sides (towards the previous and the next corner).
 function cornerSides(px, i) {
@@ -214,9 +194,33 @@ function layoutMarks(points, scale, marks, { corners = [], font = 16 } = {}) {
     shape.legs.forEach((s, k) => {
       const number = `${round(shape.legLengths[k])}`;
       const text = `${number} units`;
-      const { hw, hh } = chip(number.length * 0.6 + 0.3 + 1.75);
-      const at = besideSide(px, s, hw, hh, 8, out.arrows.map((a) => ({ at: a.at, r: MARK.chevron + MARK.gap + 4 })), out.labels);
-      out.labels.push({ text, number, unit: 'units', value: round(shape.legLengths[k]), at, hw, hh, side: s });
+      const { hw: len, hh: thick } = chip(number.length * 0.6 + 0.3 + 1.75);
+      // written along its leg, at the middle and just inside it, the way a ruler laid on that side
+      // is read; turned so it never reads upside down
+      const [p, q] = [px[s], px[(s + 1) % 4]];
+      let u = unit(sub(q, p));
+      if (u[0] < -1e-9 || (Math.abs(u[0]) <= 1e-9 && u[1] > 0)) u = mul(u, -1);
+      // at the middle if it fits inside the body there, else nudged along the leg to where it does
+      const n = inward(px, s);
+      const across = [-u[1], u[0]];
+      const clearOf = (c, at, r) => {
+        const d = sub(at, c);
+        return Math.hypot(Math.max(Math.abs(dot(d, u)) - len, 0), Math.max(Math.abs(dot(d, across)) - thick, 0)) >= r;
+      };
+      const fits = (c) => [[-1, -1], [1, -1], [1, 1], [-1, 1]].every(([a, b]) => inside(px, add(c, add(mul(u, a * len), mul(across, b * thick)))))
+        && out.arrows.every((arrow) => clearOf(c, arrow.at, MARK.chevron + MARK.gap / 2 + 3));
+      let at = null;
+      for (const t of [0.5, 0.56, 0.44, 0.62, 0.38, 0.68, 0.32]) {
+        for (const gap of [7, 4]) {
+          const c = add(add(p, mul(sub(q, p), t)), mul(n, thick + gap));
+          if (!at && fits(c)) at = c;
+        }
+      }
+      at = at || add(mul(add(p, q), 0.5), mul(n, thick + 7));
+      // hw/hh: the upright box round the turned label, for keeping other things clear of it
+      const hw = Math.abs(u[0]) * len + Math.abs(u[1]) * thick;
+      const hh = Math.abs(u[1]) * len + Math.abs(u[0]) * thick;
+      out.labels.push({ text, number, unit: 'units', value: round(shape.legLengths[k]), at, hw, hh, len, thick, angle: Math.atan2(u[1], u[0]), side: s });
     });
   }
   if (marks.includes('ticks') && shape.kind === 'trapezium') {
@@ -281,7 +285,7 @@ function crossings(px, axis, value) {
 
 Object.assign(PopoGame, {
   geometry: {
-    DEG, ANGLE_TOLERANCE, LENGTH_TOLERANCE, MARK, trapezium, angled, based, kite, arrowhead, orient, measure, classify,
+    DEG, ANGLE_TOLERANCE, LENGTH_TOLERANCE, MARK, trapezium, angled, kite, arrowhead, orient, measure, classify,
     layoutMarks, toPixels, inside, distanceToSegment, edgeClearance, crossings, round,
   },
 });
