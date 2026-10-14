@@ -81,7 +81,7 @@ async function correctCatch(game, fish) {
     fish.surprise(0.9);
     audio.play('hooked');
     // in level 5 the angles told us; now the fish shows its parallel sides
-    if (fish.markedAngles.length && fish.revealParallel()) audio.play('boing');
+    if (fish.spec.level === 5 && fish.revealParallel()) audio.play('boing');
     await clock.wait(300, token);
 
     // reeled in towards the rod: it fights the line (less as it tires), tail flicking, nose rising,
@@ -524,6 +524,7 @@ async function finishLevel(game) {
   const next = state.level + 1;
   try {
     state.phase = PHASE.LEVEL_TRANSITION;
+    state.selectedFish = null; // the last catch is in the bucket
     game.penguin = null; // off it goes before the scenery moves on
     ui.setHitsEnabled(false);
     game.showHandOn(null);

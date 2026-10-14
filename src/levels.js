@@ -4,6 +4,13 @@ const { trapezium, angled, kite, arrowhead, orient } = PopoGame.geometry;
 
 // The trapezium activity: five levels at one frozen lake, their fish, and the story lines.
 
+// A trapezium from its bottom base, its height and its two base angles in whole degrees (the top
+// corners lean in by height / tan(angle); 90° stands straight up).
+function byAngles(bottom, height, [a, b]) {
+  const lean = (deg) => (deg === 90 ? 0 : height / Math.tan((deg * Math.PI) / 180));
+  return trapezium({ bottom, height, left: lean(a), right: lean(b) });
+}
+
 // The art fish (assets/sprites/fish.webp) swim on the title and leap during Popo's entrance;
 // none is four-sided, so only the trapezium levels' fish are quadrilaterals.
 // atlas: sprite index (row-major, see FISH_ATLAS).
@@ -51,35 +58,36 @@ const FISH = [
   { id: 'L1-i', level: 1, kind: 'kite', correct: false, pattern: 'diamonds', body: kite({ back: 3.6, front: 6.4, half: 2.7 }) },
   { id: 'L1-j', level: 1, kind: 'arrowhead', correct: false, pattern: 'hearts', body: arrowhead({ length: 10, notch: 3.4, half: 3.6 }) },
 
-  // Level 2: non-right scalene trapeziums among isosceles ones (equal legs; no right angles, whose
-  // unequal legs would look scalene too); whole-unit legs
-  { id: 'L2-a', level: 2, kind: 'scalene', correct: true, pattern: 'dots', body: trapezium({ bottom: 12, height: 4.4, legs: [5, 7] }) },
-  { id: 'L2-b', level: 2, kind: 'scalene', correct: true, pattern: 'waves', body: trapezium({ bottom: 13.5, height: 5, legs: [6, 8] }) },
-  { id: 'L2-c', level: 2, kind: 'scalene', correct: true, pattern: 'stripes', body: trapezium({ bottom: 13, height: 4.8, legs: [7, 5] }) },
-  { id: 'L2-d', level: 2, kind: 'scalene', correct: true, pattern: 'diamonds', body: trapezium({ bottom: 13, height: 4.6, legs: [5, 8] }) },
-  { id: 'L2-e', level: 2, kind: 'isosceles', correct: false, pattern: 'hearts', body: trapezium({ bottom: 12.5, height: 4.6, legs: [5, 5] }) },
-  { id: 'L2-f', level: 2, kind: 'isosceles', correct: false, pattern: 'dots', body: trapezium({ bottom: 13, height: 4.6, legs: [6, 6] }) },
-  { id: 'L2-g', level: 2, kind: 'isosceles', correct: false, pattern: 'waves', body: trapezium({ bottom: 12, height: 4.8, legs: [6, 6] }) },
-  { id: 'L2-h', level: 2, kind: 'isosceles', correct: false, pattern: 'stripes', body: orient(trapezium({ bottom: 11.5, height: 4.2, legs: [5, 5] }), { flipY: true }) },
-  // Level 3: isosceles trapeziums among look-alikes whose legs differ a little
-  { id: 'L3-a', level: 3, kind: 'isosceles', correct: true, pattern: 'dots', body: trapezium({ bottom: 11, height: 4.6, left: 2.8, right: 2.8 }) },
-  { id: 'L3-b', level: 3, kind: 'isosceles', correct: true, pattern: 'waves', body: orient(trapezium({ bottom: 10, height: 4.2, left: 2, right: 2 }), { flipY: true }) },
-  { id: 'L3-c', level: 3, kind: 'isosceles', correct: true, pattern: 'stripes', body: trapezium({ bottom: 12, height: 4, left: 3.4, right: 3.4 }) },
-  { id: 'L3-d', level: 3, kind: 'isosceles', correct: true, pattern: 'hearts', body: orient(trapezium({ bottom: 10.5, height: 5, left: 2.4, right: 2.4 }), { turn: -6 }) },
-  { id: 'L3-e', level: 3, kind: 'scalene', correct: false, pattern: 'diamonds', body: trapezium({ bottom: 11, height: 4.6, left: 1.9, right: 3.7 }) },
-  { id: 'L3-f', level: 3, kind: 'scalene', correct: false, pattern: 'dots', body: orient(trapezium({ bottom: 10.5, height: 4.4, left: 3.5, right: 1.6 }), { flipY: true }) },
-  { id: 'L3-g', level: 3, kind: 'scalene', correct: false, pattern: 'waves', body: trapezium({ bottom: 12, height: 4, left: 2.4, right: 4.6 }) },
+  // Levels 2 to 4 show only degrees: each fish is built from whole-degree angles, so every
+  // number it shows is exact. `corners` are the two marked corners, `angles` what they measure.
+  // Level 2: non-right scalene trapeziums (different base angles) among isosceles ones (equal)
+  { id: 'L2-a', level: 2, kind: 'scalene', correct: true, pattern: 'dots', corners: [0, 1], angles: [56, 72], body: byAngles(12, 4.4, [56, 72]) },
+  { id: 'L2-b', level: 2, kind: 'scalene', correct: true, pattern: 'waves', corners: [0, 1], angles: [64, 50], body: byAngles(13, 4.8, [64, 50]) },
+  { id: 'L2-c', level: 2, kind: 'scalene', correct: true, pattern: 'stripes', corners: [0, 1], angles: [74, 58], body: byAngles(12.5, 4.6, [74, 58]) },
+  { id: 'L2-d', level: 2, kind: 'scalene', correct: true, pattern: 'diamonds', corners: [0, 1], angles: [52, 68], body: byAngles(13, 4.6, [52, 68]) },
+  { id: 'L2-e', level: 2, kind: 'isosceles', correct: false, pattern: 'hearts', corners: [0, 1], angles: [62, 62], body: byAngles(12.5, 4.6, [62, 62]) },
+  { id: 'L2-f', level: 2, kind: 'isosceles', correct: false, pattern: 'dots', corners: [0, 1], angles: [55, 55], body: byAngles(13, 4.6, [55, 55]) },
+  { id: 'L2-g', level: 2, kind: 'isosceles', correct: false, pattern: 'waves', corners: [0, 1], angles: [68, 68], body: byAngles(12, 4.8, [68, 68]) },
+  { id: 'L2-h', level: 2, kind: 'isosceles', correct: false, pattern: 'stripes', corners: [0, 1], angles: [60, 60], body: orient(byAngles(11.5, 4.2, [60, 60]), { flipY: true }) },
+  // Level 3: isosceles trapeziums among look-alikes whose base angles differ a little
+  { id: 'L3-a', level: 3, kind: 'isosceles', correct: true, pattern: 'dots', corners: [0, 1], angles: [60, 60], body: byAngles(11, 4.6, [60, 60]) },
+  { id: 'L3-b', level: 3, kind: 'isosceles', correct: true, pattern: 'waves', corners: [0, 1], angles: [66, 66], body: orient(byAngles(10, 4.2, [66, 66]), { flipY: true }) },
+  { id: 'L3-c', level: 3, kind: 'isosceles', correct: true, pattern: 'stripes', corners: [0, 1], angles: [54, 54], body: byAngles(12, 4, [54, 54]) },
+  { id: 'L3-d', level: 3, kind: 'isosceles', correct: true, pattern: 'hearts', corners: [0, 1], angles: [64, 64], body: orient(byAngles(10.5, 5, [64, 64]), { turn: -6 }) },
+  { id: 'L3-e', level: 3, kind: 'scalene', correct: false, pattern: 'diamonds', corners: [0, 1], angles: [68, 52], body: byAngles(11, 4.6, [68, 52]) },
+  { id: 'L3-f', level: 3, kind: 'scalene', correct: false, pattern: 'dots', corners: [0, 1], angles: [52, 70], body: orient(byAngles(10.5, 4.4, [52, 70]), { flipY: true }) },
+  { id: 'L3-g', level: 3, kind: 'scalene', correct: false, pattern: 'waves', corners: [0, 1], angles: [60, 44], body: byAngles(12, 4, [60, 44]) },
 
-  // Level 4: right trapeziums (right angles at the back or the front, either base longer) among
-  // trapeziums with no right angle
-  { id: 'L4-a', level: 4, kind: 'right', correct: true, pattern: 'dots', body: trapezium({ bottom: 11, height: 4.6, left: 0, right: 3.6 }) },
-  { id: 'L4-b', level: 4, kind: 'right', correct: true, pattern: 'waves', body: trapezium({ bottom: 10.5, height: 4.4, left: 3.4, right: 0 }) },
-  { id: 'L4-c', level: 4, kind: 'right', correct: true, pattern: 'stripes', body: orient(trapezium({ bottom: 11.5, height: 4.8, left: 0, right: 4 }), { flipY: true }) },
-  { id: 'L4-d', level: 4, kind: 'right', correct: true, pattern: 'hearts', body: orient(trapezium({ bottom: 10, height: 5, left: 2.8, right: 0 }), { flipY: true }) },
-  { id: 'L4-e', level: 4, kind: 'isosceles', correct: false, pattern: 'diamonds', body: trapezium({ bottom: 11, height: 4.6, left: 2.6, right: 2.6 }) },
-  { id: 'L4-f', level: 4, kind: 'scalene', correct: false, pattern: 'dots', body: trapezium({ bottom: 11, height: 4.4, left: 1.4, right: 3.8 }) },
-  { id: 'L4-g', level: 4, kind: 'scalene', correct: false, pattern: 'waves', body: orient(trapezium({ bottom: 10.5, height: 4.8, left: 3.6, right: 2.2 }), { flipY: true }) },
-  { id: 'L4-h', level: 4, kind: 'scalene', correct: false, pattern: 'stripes', body: trapezium({ bottom: 12, height: 4, left: 3, right: 4.4 }) },
+  // Level 4: right trapeziums (both ends of one leg 90°) among trapeziums with no right angle;
+  // each fish shows the two angles at the ends of one leg
+  { id: 'L4-a', level: 4, kind: 'right', correct: true, pattern: 'dots', corners: [0, 3], angles: [90, 90], body: byAngles(11, 4.6, [90, 52]) },
+  { id: 'L4-b', level: 4, kind: 'right', correct: true, pattern: 'waves', corners: [1, 2], angles: [90, 90], body: byAngles(10.5, 4.4, [54, 90]) },
+  { id: 'L4-c', level: 4, kind: 'right', correct: true, pattern: 'stripes', corners: [0, 3], angles: [90, 90], body: orient(byAngles(11.5, 4.8, [90, 50]), { flipY: true }) },
+  { id: 'L4-d', level: 4, kind: 'right', correct: true, pattern: 'hearts', corners: [1, 2], angles: [90, 90], body: orient(byAngles(10, 5, [60, 90]), { flipY: true }) },
+  { id: 'L4-e', level: 4, kind: 'isosceles', correct: false, pattern: 'diamonds', corners: [0, 3], angles: [62, 118], body: byAngles(11, 4.6, [62, 62]) },
+  { id: 'L4-f', level: 4, kind: 'scalene', correct: false, pattern: 'dots', corners: [0, 3], angles: [72, 108], body: byAngles(11, 4.4, [72, 50]) },
+  { id: 'L4-g', level: 4, kind: 'scalene', correct: false, pattern: 'waves', corners: [1, 2], angles: [66, 114], body: orient(byAngles(10.5, 4.8, [56, 66]), { flipY: true }) },
+  { id: 'L4-h', level: 4, kind: 'scalene', correct: false, pattern: 'stripes', corners: [0, 3], angles: [58, 122], body: byAngles(12, 4, [58, 46]) },
 
   // Level 5: the handoff's six fish, each showing ∠D and ∠A at the two ends of its left side DA
   { id: 'A', level: 5, kind: 'trapezium', correct: true, pattern: 'dots', corners: [0, 3], angles: [70, 110], body: angled({ bottom: 11, side: 5, angles: [70, 110, 60] }) },
@@ -95,8 +103,9 @@ const RECALL = { body: angled({ bottom: 10, side: 5, angles: [70, 110, 62] }), c
 
 // place: where on the lake it plays (PLACES). school: fish swimming when the level starts;
 // targets: catches among them; least: distractors top the school up so it never drops below this.
-// speed: cruising range (stage px/s). marks: see layoutMarks in src/geometry.js (no parallel
-// arrows in levels 1 to 4: spotting the parallel sides is the learner's job). sizes: random size
+// speed: cruising range (stage px/s). marks: see layoutMarks in src/geometry.js (only degrees:
+// no parallel arrows, lengths or ticks, so spotting the shape is the learner's job). compare: how
+// a wrong fish's two angles read on its "why" card (pair: 62° = 62°, both: 72° and 108°, sum). sizes: random size
 // range ([1, 1] keeps one scale, so the length labels compare across fish). hint: shown after a
 // wrong catch; why: the reason a wrong fish isn't one, on a card over it and said by Popo; oops:
 // Popo's beats as he climbs back aboard.
@@ -106,16 +115,16 @@ const LEVELS = [
     school: 4, targets: 2, least: 3, speed: [34, 46], sizes: [0.9, 1.08], marks: [],
     hint: 'Look for *parallel* sides!', why: 'No *parallel* sides!', oops: ['Whoopsie Doopsie!', 'No *parallel* sides!'] },
   { place: 1, instruction: 'Catch the *scalene* trapeziums!', catches: 3,
-    school: 4, targets: 2, least: 3, speed: [40, 52], sizes: [1, 1], marks: ['legs'],
-    hint: 'Check the *leg* lengths!', why: 'Its legs are *equal!*', oops: ['Whoopsie Doopsie!', 'Its legs are *equal!*'] },
+    school: 4, targets: 2, least: 3, speed: [40, 52], sizes: [1, 1], marks: ['angles'], compare: 'pair',
+    hint: 'Compare the base *angles!*', why: 'Its base angles are *equal!*', oops: ['Whoopsie Doopsie!', 'Its base angles are *equal!*'] },
   { place: 2, instruction: 'Catch the *isosceles* trapeziums!', catches: 3,
-    school: 4, targets: 2, least: 4, speed: [44, 58], sizes: [0.96, 1.04], marks: ['ticks'],
-    hint: 'Are the legs *equal?*', why: 'Its legs are *different!*', oops: ['Whoopsie Doopsie!', 'Its legs are *different!*'] },
+    school: 4, targets: 2, least: 4, speed: [44, 58], sizes: [0.96, 1.04], marks: ['angles'], compare: 'pair',
+    hint: 'Are the base angles *equal?*', why: 'Its base angles are *different!*', oops: ['Whoopsie Doopsie!', 'Its base angles are *different!*'] },
   { place: 3, instruction: 'Catch the right angle *trapeziums*!', catches: 3,
-    school: 5, targets: 2, least: 4, speed: [44, 58], sizes: [0.96, 1.04], marks: ['right'],
+    school: 5, targets: 2, least: 4, speed: [44, 58], sizes: [0.96, 1.04], marks: ['angles'], compare: 'both',
     hint: 'Look for two *right* angles!', why: 'No *right* angles!', oops: ['Whoopsie Doopsie!', 'No *right* angles!'] },
   { place: 4, instruction: 'Catch all the *trapeziums*!', catches: 4,
-    school: 5, targets: 3, least: 4, speed: [44, 58], sizes: [1, 1], marks: ['angles'], observe: true,
+    school: 5, targets: 3, least: 4, speed: [44, 58], sizes: [1, 1], marks: ['angles'], compare: 'sum', observe: true,
     hint: 'Add the marked *angles!*', why: "These angles don't add up to *180°!*",
     oops: ['Not a *trapezium.*', "These angles don't add up to *180°!*", 'Try *again!*'] },
 ];

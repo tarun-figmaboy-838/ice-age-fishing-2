@@ -59,21 +59,32 @@ CHECK = r'''() => {
     if (L === 2 && f.correct && c.type !== 'scalene') fail(f.id, 'level 2 catch not a non-right scalene trapezium');
     if (L === 2 && !f.correct && c.type !== 'isosceles') fail(f.id, 'level 2 distractor not isosceles (no right-angled fish in level 2)');
     if (L !== 4 && c.right.length) fail(f.id, 'right angles only in level 4');
-    if (L === 2) c.legLengths.forEach((l) => { if (!near(l, Math.round(l), 1e-9)) fail(f.id, `leg ${l} not whole units`); });
+    if (f.corners) {
+      // the two marked corners: the ends of one side, measuring exactly the whole degrees shown
+      const [i, j] = f.corners;
+      if ((i + 1) % 4 !== j && (j + 1) % 4 !== i) fail(f.id, 'marked corners are not the two ends of one side');
+      f.angles.forEach((a, k) => {
+        if (!near(c.angles[f.corners[k]], a, 1e-6)) fail(f.id, `corner ${f.corners[k]} is ${c.angles[f.corners[k]]}, should be ${a}`);
+        if (a !== Math.round(a)) fail(f.id, `angle ${a} is not whole degrees`);
+      });
+    } else if (LEVELS[L - 1].marks.includes('angles')) fail(f.id, 'a level that shows angles needs marked corners');
+    if (L === 2 || L === 3) {
+      // the base angles tell isosceles (equal) from scalene (different)
+      if ((f.angles[0] === f.angles[1]) !== c.equalLegs) fail(f.id, 'base angles do not match the legs');
+    }
+    if (L === 4 && f.correct && !(f.angles[0] === 90 && f.angles[1] === 90)) fail(f.id, 'a right trapezium shows its two right angles');
     if (L === 3 && f.correct !== (c.kind === 'trapezium' && c.equalLegs)) fail(f.id, 'level 3: catch must have equal legs, distractors unequal');
     if (L === 3 && !f.correct && c.kind !== 'trapezium') fail(f.id, 'level 3 distractor not a trapezium');
     if (L === 4 && f.correct && c.type !== 'right') fail(f.id, 'level 4 catch not a right trapezium');
     if (L === 4 && !f.correct && (c.kind !== 'trapezium' || c.right.length)) fail(f.id, 'level 4 distractor must be a trapezium with no right angle');
     if (L === 5) {
-      const [i, j] = f.corners;
-      if ((i + 1) % 4 !== j && (j + 1) % 4 !== i) fail(f.id, 'marked corners are not the two ends of one side');
-      f.angles.forEach((a, k) => { if (!near(c.angles[f.corners[k]], a, 1e-6)) fail(f.id, `corner ${f.corners[k]} is ${c.angles[f.corners[k]]}, should be ${a}`); });
       const sum = f.angles[0] + f.angles[1];
       if (f.correct !== (sum === 180)) fail(f.id, 'catch must have a 180° pair, distractors not');
       if (f.correct !== (c.kind === 'trapezium')) fail(f.id, 'catch must be a trapezium, distractor not');
     }
   }
 
+  const L_OF = (f) => f.level;
   function markChecks(f, c, m, id = f.id) {
     const marks = LEVELS[f.level - 1].marks;
     if (marks.includes('parallel') && c.kind === 'trapezium') {
@@ -88,6 +99,7 @@ CHECK = r'''() => {
       if (m.ticks.map((t) => t.side).sort().join() !== [...c.legs].sort().join()) fail(id, 'ticks not on the legs');
     }
     if (m.squares.map((q) => q.corner).sort().join() !== (marks.includes('right') ? c.right : []).slice().sort().join()) fail(id, 'right-angle squares not exactly on the right angles');
+    if (L_OF(f) < 5 && (m.ticks.length || m.labels.some((l) => l.side !== undefined))) fail(id, 'levels 1 to 4 show only degrees (no lengths or ticks)');
     if (marks.includes('angles') && m.arcs.map((a) => a.corner).sort().join() !== [...f.corners].sort().join()) fail(id, 'arcs not on the marked corners');
     for (const l of m.labels) {
       if (l.side !== undefined) {

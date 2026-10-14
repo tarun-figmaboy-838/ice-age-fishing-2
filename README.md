@@ -157,12 +157,18 @@ the line to dangle under the rod tip, a little stream squirting from the hole in
 Swiftee: "Eek!", Popo: "Huh?!", Swiftee: "Good catch, Popo!" They both crack up ("Ha ha ha!"
 "Hee hee hee!"), Popo lets go and the boot drops back in with a splash.
 
-Wrong catches explain themselves: the moment a wrong fish is tapped it gets a card with a red ✗
-and the reason in a few words, with its own numbers where they help (level 1 "No parallel sides!",
-level 2 "Its legs are equal!" with "6 units = 6 units" and its legs glowing, level 3 "Its legs are
-different!", level 4 "No right angles!", level 5 "These angles don't add up to 180°!" with
-"95° + 105° = 200°"), and Popo says it as he climbs back aboard. Levels 1 to 4 show no parallel
-arrows: spotting the parallel sides is the learner's job (level 5's catches still reveal theirs).
+The fish show only degrees (no parallel arrows, lengths or ticks: spotting the shape is the
+learner's job). Level 1 shows nothing; levels 2 and 3 show the two base angles (equal on an
+isosceles trapezium, different on a scalene one); level 4 the two angles on one leg (90° and 90°
+on a right trapezium); level 5 the handoff's angles. Each fish is built from whole-degree angles
+(`byAngles` in `levels.js`), so every number is exact.
+
+Wrong catches explain themselves: the moment a wrong fish is tapped, a playful "Oops!" card pops
+up over it with the reason in a few words and its own angles (level 1 "No parallel sides!",
+level 2 "Its base angles are equal!" 60° = 60°, level 3 "Its base angles are different!" 52° ≠
+70°, level 4 "No right angles!" 62° and 118°, level 5 "These angles don't add up to 180°!" 95° +
+105° = 200°), while the fish lights up (its angles swell into gold fans, or in level 1 its outline
+glows), and Popo says the reason as he climbs back aboard.
 
 Little extras for fun: three right catches in a row and Popo does a victory dance in a burst of
 bubble confetti; a tap on Swiftee makes her twirl, a tap on the bucket has the last fish caught
