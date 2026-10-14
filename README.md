@@ -161,8 +161,8 @@ Levels 1 to 4 mark nothing on the fish (no arrows, lengths, ticks, right-angle s
 degrees): spotting the shape is the learner's job. Level 5's fish show their two angles. The fish
 of levels 2 to 4 are built from whole-degree base angles (`byAngles` in `levels.js`).
 
-Wrong catches explain themselves: the moment a wrong fish is tapped, a card in the game's own orange
-button colours pops up over it, pointing at it, with the reason in a few words (level 1 "No parallel sides!", level 2 "Its legs are
+Wrong catches explain themselves: the moment a wrong fish is tapped, a white card with the reason in
+the game's orange pops up over it, pointing at it, with the reason in a few words (level 1 "No parallel sides!", level 2 "Its legs are
 equal!", level 3 "Its legs are different!", level 4 "No right angles!", level 5 "These angles
 don't add up to 180°!" with its own 95° + 105° = 200°), while what gives it away lights up on the
 fish (its legs in levels 2 and 3, its outline in levels 1 and 4, its angles in gold fans in level

@@ -2043,8 +2043,8 @@ class Game {
       }
       ctx.restore();
     }
-    // the card, over the fish (or under it when the fish swims high), never off the stage: in the
-    // game's own button colours, its pointer part of the same outline
+    // the card, over the fish (or under it when the fish swims high), never off the stage: white,
+    // with the reason in orange, its pointer part of the same outline
     ctx.save();
     const font = (weight, size) => `${weight} ${size}px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif`;
     ctx.font = font(700, 33);
@@ -2106,35 +2106,21 @@ class Game {
     ctx.translate(0, 7);
     ctx.fill();
     ctx.restore();
-    // the warm yellow-to-orange of the game's buttons, a dark brown edge and a light top rim
-    const fill = ctx.createLinearGradient(0, -hh, 0, hh);
-    fill.addColorStop(0, '#ffd860');
-    fill.addColorStop(1, '#ff9a1c');
-    ctx.fillStyle = fill;
+    // white inside, a dark brown edge, the reason in the game's orange
+    ctx.fillStyle = '#ffffff';
     ctx.fill();
-    ctx.save();
-    ctx.clip();
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
-    ctx.beginPath();
-    ctx.roundRect(-hw + 10, -hh + 6, W - 20, 7, 4);
-    ctx.fill();
-    ctx.restore();
-    shape();
     ctx.lineWidth = 4.5;
     ctx.strokeStyle = '#3b1d00';
     ctx.stroke();
     // the reason, and in level 5 the fish's own angles
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#3b1d00';
+    ctx.fillStyle = '#e8590c';
     ctx.font = font(700, 33);
     ctx.fillText(w.text, 0, w.detail ? -15 : 3);
     if (w.detail) {
       ctx.font = font(700, 29);
-      ctx.fillStyle = '#ffffff';
-      ctx.lineWidth = 6;
-      ctx.strokeStyle = '#3b1d00';
-      ctx.strokeText(w.detail, 0, 25);
+      ctx.fillStyle = '#c4501a';
       ctx.fillText(w.detail, 0, 25);
     }
     ctx.restore();
