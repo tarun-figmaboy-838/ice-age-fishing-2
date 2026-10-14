@@ -718,7 +718,7 @@ class Game {
       const target = this.inViewTarget();
       if (target) target.hinted = true;
       this.ui.pulseTarget();
-      this.audio.play('hint');
+      try { this.audio.play('hint'); } catch (e) { /* sound is optional */ }
       this.speakInstruction();
     }
     if (state.idleTime > HINT_DELAY + 3) {
@@ -1960,6 +1960,7 @@ class Game {
     this.popo.draw(ctx);
     this.drawBucketFish(ctx);
     this.drawConfetti(ctx);
+    this.drawWhy(ctx);
     this.drawHookRing(ctx);
     this.drawMark(ctx);
     this.drawRaftWater(ctx);
@@ -1974,8 +1975,146 @@ class Game {
     this.ui.syncHits(state.fish);
   }
 
+  // --- why a wrong fish isn't one -------------------------------------------------------------------
+  // A card over the fish with a red ✗ and the reason in a few words (the level's `why`, which Popo
+  // also says), with the fish's own numbers where they help (its legs, its two angles). When the
+  // legs are the reason, they light up on the fish too.
+  showWhy(fish) {
+    const level = this.level();
+    if (!level.why) return;
+    const c = geometry.classify(fish.spec.body);
+    let detail = '';
+    if (level.marks.includes('legs') && c.legLengths.length === 2) {
+      const [a, b] = c.legLengths.map((l) => Math.round(l * 10) / 10);
+      detail = `${a} units ${a === b ? '=' : '≠'} ${b} units`;
+    }
+    if (level.marks.includes('angles') && fish.spec.angles) {
+      const [a, b] = fish.spec.angles;
+      detail = `${a}° + ${b}° = ${a + b}°`;
+    }
+    const legs = level.marks.includes('legs') || level.marks.includes('ticks') ? c.legs : [];
+    this.why = { fish, text: level.why.replace(/\*/g, ''), detail, legs, t: 0, out: 0 };
+    this.audio.play('nope');
+  }
+
+  hideWhy() {
+    if (this.why && !this.why.out) this.why.out = 0.001;
+  }
+
+  updateWhy(dt) {
+    const w = this.why;
+    if (!w) return;
+    w.t += dt;
+    if (w.out && (w.out += dt) > 0.35) this.why = null;
+  }
+
+  drawWhy(ctx) {
+    const w = this.why;
+    if (!w || w.fish.gone || w.fish.offstage) return;
+    const f = w.fish;
+    const still = this.fx.reduced;
+    const fade = w.out ? Math.max(0, 1 - w.out / 0.35) : 1;
+    // the legs that give it away, glowing on the fish
+    if (w.legs.length && f.marksFor) {
+      const px = f.marksFor(ShapeFish.labelFont).px;
+      const glow = (0.55 + 0.45 * Math.sin(w.t * 6)) * fade * Math.min(1, w.t / 0.3);
+      ctx.save();
+      ctx.lineCap = 'round';
+      for (const [width, colour] of [[11, `rgba(255, 140, 40, ${0.35 * glow})`], [5, `rgba(255, 110, 30, ${glow})`]]) {
+        ctx.lineWidth = width;
+        ctx.strokeStyle = colour;
+        for (const s of w.legs) {
+          const p = f.toStage(px[s]);
+          const q = f.toStage(px[(s + 1) % px.length]);
+          ctx.beginPath();
+          ctx.moveTo(p[0], p[1]);
+          ctx.lineTo(q[0], q[1]);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+    // the card, over the fish (or under it when the fish swims high), never off the stage
+    ctx.save();
+    ctx.font = '700 30px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
+    const tw = ctx.measureText(w.text).width;
+    ctx.font = '600 24px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
+    const dw = w.detail ? ctx.measureText(w.detail).width : 0;
+    const badge = 40;
+    const W = badge + 16 + Math.max(tw, dw) + 34;
+    const H = w.detail ? 86 : 60;
+    const half = (f.h * f.scale * (f.zoom || 1)) / 2;
+    let below = false;
+    let top = f.y - half - 18 - H;
+    if (top < this.waterline + 10) {
+      below = true;
+      top = f.y + half + 18;
+    }
+    top = Math.min(STAGE_H - H - 10, top);
+    const left = Math.max(10, Math.min(STAGE_W - W - 10, f.x - W / 2));
+    const pop = still ? 1 : ease.outBack(Math.min(1, w.t / 0.35));
+    const bob = still ? 0 : Math.sin(w.t * 2.4) * 3;
+    ctx.globalAlpha = fade;
+    ctx.translate(left + W / 2, top + H / 2 + bob);
+    ctx.scale(pop, pop);
+    ctx.lineJoin = 'round';
+    // the tail points at the fish
+    const tx = Math.max(-W / 2 + 26, Math.min(W / 2 - 26, f.x - (left + W / 2)));
+    ctx.beginPath();
+    ctx.roundRect(-W / 2, -H / 2, W, H, 22);
+    if (below) {
+      ctx.moveTo(tx - 12, -H / 2);
+      ctx.lineTo(tx, -H / 2 - 16);
+      ctx.lineTo(tx + 12, -H / 2);
+    } else {
+      ctx.moveTo(tx - 12, H / 2);
+      ctx.lineTo(tx, H / 2 + 16);
+      ctx.lineTo(tx + 12, H / 2);
+    }
+    ctx.fillStyle = 'rgba(0, 20, 60, 0.25)';
+    ctx.save();
+    ctx.translate(0, 5);
+    ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = '#fff8e8';
+    ctx.fill();
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = '#3b1d00';
+    ctx.stroke();
+    // a red ✗ badge
+    const bx = -W / 2 + 14 + badge / 2;
+    ctx.beginPath();
+    ctx.arc(bx, 0, badge / 2, 0, TAU);
+    ctx.fillStyle = '#ff5a4f';
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(bx - 8, -8);
+    ctx.lineTo(bx + 8, 8);
+    ctx.moveTo(bx + 8, -8);
+    ctx.lineTo(bx - 8, 8);
+    ctx.stroke();
+    const x0 = bx + badge / 2 + 14;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#3b1d00';
+    ctx.font = '700 30px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
+    ctx.fillText(w.text, x0, w.detail ? -14 : 2);
+    if (w.detail) {
+      ctx.font = '600 24px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif';
+      ctx.fillStyle = '#c4501a';
+      ctx.fillText(w.detail, x0, 20);
+    }
+    ctx.restore();
+  }
+
   // --- little fun: bubble confetti, curious taps, the fish in the bucket, a penguin -----------------
   updateFun(dt) {
+    this.updateWhy(dt);
     for (const c of this.confetti) {
       c.life += dt / 2.2;
       c.vx *= 1 - Math.min(1, dt * 1.8);
@@ -2404,6 +2543,7 @@ class Game {
     this.confetti = [];
     this.bucketFish = null;
     this.penguin = null;
+    this.why = null;
     this.plantWiggle = new Array(8).fill(0);
     this.panScene(0, 0);
   }

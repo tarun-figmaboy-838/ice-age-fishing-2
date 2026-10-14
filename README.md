@@ -157,6 +157,13 @@ the line to dangle under the rod tip, a little stream squirting from the hole in
 Swiftee: "Eek!", Popo: "Huh?!", Swiftee: "Good catch, Popo!" They both crack up ("Ha ha ha!"
 "Hee hee hee!"), Popo lets go and the boot drops back in with a splash.
 
+Wrong catches explain themselves: the moment a wrong fish is tapped it gets a card with a red ✗
+and the reason in a few words, with its own numbers where they help (level 1 "No parallel sides!",
+level 2 "Its legs are equal!" with "6 units = 6 units" and its legs glowing, level 3 "Its legs are
+different!", level 4 "No right angles!", level 5 "These angles don't add up to 180°!" with
+"95° + 105° = 200°"), and Popo says it as he climbs back aboard. Levels 1 to 4 show no parallel
+arrows: spotting the parallel sides is the learner's job (level 5's catches still reveal theirs).
+
 Little extras for fun: three right catches in a row and Popo does a victory dance in a burst of
 bubble confetti; a tap on Swiftee makes her twirl, a tap on the bucket has the last fish caught
 peek out and waggle hello, and a tap on a seaweed sets it wiggling; once a level a penguin

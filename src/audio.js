@@ -339,6 +339,7 @@ class AudioEngine {
       case 'ascend': this.tone({ freq: 440, to: 880, type: 'sine', dur: 0.35, gain: 0.06 }); break;
       case 'pop': this.tone({ freq: 380, to: 1300, type: 'sine', dur: 0.07, gain: 0.14 }); this.noise({ dur: 0.05, type: 'highpass', freq: 2500, gain: 0.08 }); [0.05, 0.11].forEach((d) => this.tone({ freq: 900 + d * 4000, to: 1800, type: 'sine', t: now + d, dur: 0.04, gain: 0.04 })); break;
       case 'whee': this.tone({ freq: 900, to: 1600, type: 'sine', dur: 0.28, gain: 0.035 }); this.tone({ freq: 1600, to: 1100, type: 'sine', t: now + 0.28, dur: 0.22, gain: 0.025 }); break;
+      case 'nope': this.tone({ freq: 520, to: 470, type: 'triangle', dur: 0.14, gain: 0.09 }); this.tone({ freq: 400, to: 320, type: 'triangle', t: now + 0.16, dur: 0.2, gain: 0.09 }); break;
       case 'click': this.tone({ freq: 900, to: 520, type: 'triangle', dur: 0.05, gain: 0.09 }); this.noise({ dur: 0.04, type: 'bandpass', freq: 2200, q: 2, gain: 0.08 }); break;
       // a gentle two-note chime
       case 'chime': this.bell(1318.5, now, 0.08); this.bell(1568, now + 0.16, 0.08); break;

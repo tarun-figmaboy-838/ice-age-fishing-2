@@ -201,6 +201,7 @@ async function wrongCatch(game, fish) {
   const restore = () => {
     if (popo.mishap) popo.line.length = REST_LINE; // after the fall it lowers back from a short hang
     popo.endMishap();
+    game.hideWhy();
     fish.frozen = false;
     state.selectedFish = null;
     state.idleTime = 0;
@@ -220,6 +221,7 @@ async function wrongCatch(game, fish) {
     fish.frozen = true;
     fish.wiggle(true);
     sound('fishTap');
+    game.showWhy(fish); // why it isn't one, at once
     const castGame = Object.create(game);
     castGame.audio = { play: sound };
     await castTo(castGame, fish, token);
@@ -257,7 +259,7 @@ async function wrongCatch(game, fish) {
       [950, () => { state.phase = PHASE.FALLING; sound('slip');
         released = { ...popo.mishapRod() }; hookRelease = { ...popo.line.hook };
         popo.line.mode = 'slack'; popo.line.tension = 0;
-        fish.frozen = false;
+        fish.frozen = false; // off it swims, its card going with it
       }],
       [1750, () => { state.phase = PHASE.SUBMERGED; }],
       [2050, () => { state.phase = PHASE.RESURFACING; }],
@@ -311,12 +313,14 @@ async function wrongCatch(game, fish) {
     });
     // play resumes soon after the motion even if a long line (level 5's) is still being said; it
     // carries on over the fishing until the next cast
-    await Promise.race([feedback, clock.wait(1200, token)]);
+    await Promise.race([feedback, clock.wait(500, token)]);
     if (!isCurrent(token)) throw new Cancelled();
     restore();
     popo.act('wet');
     game.speakHint();
-    game.revertInstructionIn(3500);
+    // the hint stays up while Popo is still explaining, and a little after
+    game.revertInstructionIn(Infinity);
+    feedback.then(() => game.revertInstructionIn(3500), () => {});
   } catch (e) {
     if (isCurrent(token)) { game.endLine(); audio.stopEffects(); fx.clearTransient(); restore(); }
     else { popo.endMishap(); fish.frozen = false; }

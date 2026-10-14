@@ -95,26 +95,29 @@ const RECALL = { body: angled({ bottom: 10, side: 5, angles: [70, 110, 62] }), c
 
 // place: where on the lake it plays (PLACES). school: fish swimming when the level starts;
 // targets: catches among them; least: distractors top the school up so it never drops below this.
-// speed: cruising range (stage px/s). marks: see layoutMarks in src/geometry.js. sizes: random size
+// speed: cruising range (stage px/s). marks: see layoutMarks in src/geometry.js (no parallel
+// arrows in levels 1 to 4: spotting the parallel sides is the learner's job). sizes: random size
 // range ([1, 1] keeps one scale, so the length labels compare across fish). hint: shown after a
-// wrong catch; oops: Popo's beats as he climbs back aboard (instead of "Whoopsie Doopsie!").
+// wrong catch; why: the reason a wrong fish isn't one, on a card over it and said by Popo; oops:
+// Popo's beats as he climbs back aboard.
 // The instructions and hints are the handoff's.
 const LEVELS = [
   { place: 0, instruction: 'Catch all the *trapeziums*!', catches: 3,
-    school: 4, targets: 2, least: 3, speed: [34, 46], sizes: [0.9, 1.08], marks: ['parallel'],
-    hint: 'Look for *parallel* sides!' },
+    school: 4, targets: 2, least: 3, speed: [34, 46], sizes: [0.9, 1.08], marks: [],
+    hint: 'Look for *parallel* sides!', why: 'No *parallel* sides!', oops: ['Whoopsie Doopsie!', 'No *parallel* sides!'] },
   { place: 1, instruction: 'Catch the *scalene* trapeziums!', catches: 3,
-    school: 4, targets: 2, least: 3, speed: [40, 52], sizes: [1, 1], marks: ['parallel', 'legs'],
-    hint: 'Check the *leg* lengths!' },
+    school: 4, targets: 2, least: 3, speed: [40, 52], sizes: [1, 1], marks: ['legs'],
+    hint: 'Check the *leg* lengths!', why: 'Its legs are *equal!*', oops: ['Whoopsie Doopsie!', 'Its legs are *equal!*'] },
   { place: 2, instruction: 'Catch the *isosceles* trapeziums!', catches: 3,
-    school: 4, targets: 2, least: 4, speed: [44, 58], sizes: [0.96, 1.04], marks: ['parallel', 'ticks'],
-    hint: 'Are the legs *equal?*' },
+    school: 4, targets: 2, least: 4, speed: [44, 58], sizes: [0.96, 1.04], marks: ['ticks'],
+    hint: 'Are the legs *equal?*', why: 'Its legs are *different!*', oops: ['Whoopsie Doopsie!', 'Its legs are *different!*'] },
   { place: 3, instruction: 'Catch the right angle *trapeziums*!', catches: 3,
-    school: 5, targets: 2, least: 4, speed: [44, 58], sizes: [0.96, 1.04], marks: ['parallel', 'right'],
-    hint: 'Look for two *right* angles!' },
+    school: 5, targets: 2, least: 4, speed: [44, 58], sizes: [0.96, 1.04], marks: ['right'],
+    hint: 'Look for two *right* angles!', why: 'No *right* angles!', oops: ['Whoopsie Doopsie!', 'No *right* angles!'] },
   { place: 4, instruction: 'Catch all the *trapeziums*!', catches: 4,
     school: 5, targets: 3, least: 4, speed: [44, 58], sizes: [1, 1], marks: ['angles'], observe: true,
-    hint: 'Add the marked *angles!*', oops: ['Not a *trapezium.*', "These angles don't add up to *180°!*", 'Try *again!*'] },
+    hint: 'Add the marked *angles!*', why: "These angles don't add up to *180°!*",
+    oops: ['Not a *trapezium.*', "These angles don't add up to *180°!*", 'Try *again!*'] },
 ];
 
 // Story lines, in short comic beats delivered word by word. *Stressed* words land bigger with a
