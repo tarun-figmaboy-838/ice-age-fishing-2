@@ -1978,23 +1978,19 @@ class Game {
   }
 
   // --- why a wrong fish isn't one -------------------------------------------------------------------
-  // A playful "Oops!" card over the fish with the reason in a few words (the level's `why`, which
-  // Popo also says) and the fish's own angles where they tell (62° = 62°, 72° and 108°, 95° + 105°
-  // = 200°). Meanwhile the fish lights up: its marked angles swell into gold fans, or, with no
-  // marks to show (level 1), its whole outline glows.
+  // A bright card over the fish with the reason in a few words (the level's `why`, which
+  // Popo also says), and in level 5 its own angles (95° + 105° = 200°). Meanwhile the fish lights
+  // up: its marked angles swell into gold fans, or, with nothing marked, its legs (when they're
+  // the reason) or its whole outline glow.
   showWhy(fish) {
     const level = this.level();
     if (!level.why) return;
-    let detail = '';
     const [a, b] = fish.spec.angles || [];
-    if (a !== undefined) {
-      if (level.compare === 'pair') detail = `${a}° ${a === b ? '=' : '≠'} ${b}°`;
-      if (level.compare === 'both') detail = `${a}° and ${b}°`;
-      if (level.compare === 'sum') detail = `${a}° + ${b}° = ${a + b}°`;
-    }
+    const detail = level.compare === 'sum' && a !== undefined ? `${a}° + ${b}° = ${a + b}°` : '';
     const marked = fish.marksFor && fish.marksFor(ShapeFish.labelFont).arcs.length > 0;
     if (marked) fish.showMarks(1.15);
-    this.why = { fish, text: level.why.replace(/\*/g, ''), detail, outline: !marked, t: 0, out: 0 };
+    const legs = !marked && level.glow === 'legs' ? geometry.classify(fish.spec.body).legs : null;
+    this.why = { fish, text: level.why.replace(/\*/g, ''), detail, outline: !marked, legs, t: 0, out: 0 };
     this.audio.play('nope');
   }
 
@@ -2017,44 +2013,55 @@ class Game {
     const f = w.fish;
     const still = this.fx.reduced;
     const fade = w.out ? Math.max(0, 1 - w.out / 0.35) : 1;
-    // with nothing marked, the fish's own outline glows: look at its sides
+    // with nothing marked, what gives it away glows: its legs, or its whole outline
     if (w.outline && f.marksFor) {
       const px = f.marksFor(ShapeFish.labelFont).px;
       const glow = (0.6 + 0.4 * Math.sin(w.t * 6)) * fade * Math.min(1, w.t / 0.3);
       ctx.save();
       ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
       ctx.beginPath();
-      px.forEach((q, i) => {
-        const [x, y] = f.toStage(q);
-        if (i) ctx.lineTo(x, y);
-        else ctx.moveTo(x, y);
-      });
-      ctx.closePath();
-      for (const [width, colour] of [[14, `rgba(255, 196, 60, ${0.35 * glow})`], [5, `rgba(255, 170, 30, ${glow})`]]) {
+      if (w.legs) {
+        for (const s of w.legs) {
+          const [x0, y0] = f.toStage(px[s]);
+          const [x1, y1] = f.toStage(px[(s + 1) % px.length]);
+          ctx.moveTo(x0, y0);
+          ctx.lineTo(x1, y1);
+        }
+      } else {
+        px.forEach((q, i) => {
+          const [x, y] = f.toStage(q);
+          if (i) ctx.lineTo(x, y);
+          else ctx.moveTo(x, y);
+        });
+        ctx.closePath();
+      }
+      for (const [width, colour] of [[22, `rgba(255, 220, 90, ${0.4 * glow})`], [8, `rgba(255, 190, 40, ${glow})`]]) {
         ctx.lineWidth = width;
         ctx.strokeStyle = colour;
         ctx.stroke();
       }
       ctx.restore();
     }
-    // the card, over the fish (or under it when the fish swims high), never off the stage
+    // the card, over the fish (or under it when the fish swims high), never off the stage: in the
+    // game's own button colours, its pointer part of the same outline
     ctx.save();
     const font = (weight, size) => `${weight} ${size}px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif`;
-    ctx.font = font(700, 30);
+    ctx.font = font(700, 33);
     const tw = ctx.measureText(w.text).width;
-    ctx.font = font(700, 28);
+    ctx.font = font(700, 29);
     const dw = w.detail ? ctx.measureText(w.detail).width : 0;
-    const W = Math.max(tw, dw) + 48;
-    const H = w.detail ? 92 : 62;
+    const W = Math.max(tw, dw) + 52;
+    const H = w.detail ? 100 : 72;
     const half = (f.h * f.scale * (f.zoom || 1)) / 2;
     let below = false;
-    let top = f.y - half - 34 - H;
-    if (top < this.waterline + 26) {
+    let top = f.y - half - 36 - H;
+    if (top < this.waterline + 14) {
       below = true;
-      top = f.y + half + 30;
+      top = f.y + half + 34;
     }
-    top = Math.min(STAGE_H - H - 10, top);
-    const left = Math.max(14, Math.min(STAGE_W - W - 14, f.x - W / 2));
+    top = Math.min(STAGE_H - H - 12, top);
+    const left = Math.max(16, Math.min(STAGE_W - W - 16, f.x - W / 2));
     const pop = still ? 1 : ease.outBack(Math.min(1, w.t / 0.4));
     const wobble = still ? 0 : Math.sin(w.t * 9) * 0.05 * Math.max(0, 1 - w.t / 0.8);
     const bob = still ? 0 : Math.sin(w.t * 2.4) * 3;
@@ -2063,59 +2070,73 @@ class Game {
     ctx.rotate(wobble);
     ctx.scale(pop, pop);
     ctx.lineJoin = 'round';
-    // a speech card with its tail pointing at the fish
-    const tx = Math.max(-W / 2 + 28, Math.min(W / 2 - 28, f.x - (left + W / 2)));
-    const card = () => {
+    const r = 26;
+    const hw = W / 2;
+    const hh = H / 2;
+    const tail = 15;
+    const reach = 20;
+    const tx = Math.max(-hw + r + tail, Math.min(hw - r - tail, f.x - (left + W / 2)));
+    // one outline round the card and its pointer, so the pointer flows out of it
+    const shape = () => {
       ctx.beginPath();
-      ctx.roundRect(-W / 2, -H / 2, W, H, 24);
+      ctx.moveTo(-hw + r, -hh);
       if (below) {
-        ctx.moveTo(tx - 13, -H / 2);
-        ctx.lineTo(tx, -H / 2 - 17);
-        ctx.lineTo(tx + 13, -H / 2);
-      } else {
-        ctx.moveTo(tx - 13, H / 2);
-        ctx.lineTo(tx, H / 2 + 17);
-        ctx.lineTo(tx + 13, H / 2);
+        ctx.lineTo(tx - tail, -hh);
+        ctx.lineTo(tx, -hh - reach);
+        ctx.lineTo(tx + tail, -hh);
       }
+      ctx.lineTo(hw - r, -hh);
+      ctx.arcTo(hw, -hh, hw, -hh + r, r);
+      ctx.lineTo(hw, hh - r);
+      ctx.arcTo(hw, hh, hw - r, hh, r);
+      if (!below) {
+        ctx.lineTo(tx + tail, hh);
+        ctx.lineTo(tx, hh + reach);
+        ctx.lineTo(tx - tail, hh);
+      }
+      ctx.lineTo(-hw + r, hh);
+      ctx.arcTo(-hw, hh, -hw, hh - r, r);
+      ctx.lineTo(-hw, -hh + r);
+      ctx.arcTo(-hw, -hh, -hw + r, -hh, r);
+      ctx.closePath();
     };
-    card();
-    ctx.fillStyle = 'rgba(0, 20, 60, 0.25)';
+    shape();
+    ctx.fillStyle = 'rgba(0, 20, 60, 0.28)';
     ctx.save();
-    ctx.translate(0, 6);
+    ctx.translate(0, 7);
     ctx.fill();
     ctx.restore();
-    ctx.fillStyle = '#fff8e8';
+    // the warm yellow-to-orange of the game's buttons, a dark brown edge and a light top rim
+    const fill = ctx.createLinearGradient(0, -hh, 0, hh);
+    fill.addColorStop(0, '#ffd860');
+    fill.addColorStop(1, '#ff9a1c');
+    ctx.fillStyle = fill;
     ctx.fill();
-    ctx.lineWidth = 4;
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.beginPath();
+    ctx.roundRect(-hw + 10, -hh + 6, W - 20, 7, 4);
+    ctx.fill();
+    ctx.restore();
+    shape();
+    ctx.lineWidth = 4.5;
     ctx.strokeStyle = '#3b1d00';
     ctx.stroke();
-    // the reason, and the fish's own angles in orange
+    // the reason, and in level 5 the fish's own angles
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#14284b';
-    ctx.font = font(700, 30);
+    ctx.fillStyle = '#3b1d00';
+    ctx.font = font(700, 33);
     ctx.fillText(w.text, 0, w.detail ? -15 : 3);
     if (w.detail) {
-      ctx.font = font(700, 28);
-      ctx.fillStyle = '#e8590c';
-      ctx.fillText(w.detail, 0, 22);
+      ctx.font = font(700, 29);
+      ctx.fillStyle = '#ffffff';
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#3b1d00';
+      ctx.strokeText(w.detail, 0, 25);
+      ctx.fillText(w.detail, 0, 25);
     }
-    // an "Oops!" ribbon tilted on its top corner
-    ctx.font = font(700, 24);
-    const rw = ctx.measureText('Oops!').width + 28;
-    ctx.save();
-    ctx.translate(-W / 2 + rw / 2 + 6, -H / 2 - 4);
-    ctx.rotate(-0.1);
-    ctx.beginPath();
-    ctx.roundRect(-rw / 2, -18, rw, 36, 18);
-    ctx.fillStyle = '#ff7aa8';
-    ctx.fill();
-    ctx.lineWidth = 3.5;
-    ctx.strokeStyle = '#3b1d00';
-    ctx.stroke();
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('Oops!', 0, 2);
-    ctx.restore();
     ctx.restore();
   }
 

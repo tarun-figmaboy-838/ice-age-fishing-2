@@ -30,13 +30,13 @@
   "popo-try-again": "kokoro:hm_psi:1.05:0.9",
   "popo-great-catch": "kokoro:hm_psi:1.05:0.9",
   "popo-keep-going": "kokoro:hm_psi:1.05:0.9",
-  "narrator-catch-the-right-angle-trapeziums": "kokoro:hf_alpha:0.92:1.0",
   "swiftee-look-these-two-sides-are-parallel": "kokoro:hf_beta:0.8:1.3",
   "swiftee-yay-shape-detective": "kokoro:hf_beta:0.8:1.3",
   "popo-no-parallel-sides": "kokoro:hm_psi:1.05:0.9",
   "popo-no-right-angles": "kokoro:hm_psi:1.05:0.9",
-  "narrator-compare-the-base-angles": "kokoro:hf_alpha:0.92:1.0",
-  "narrator-are-the-base-angles-equal": "kokoro:hf_alpha:0.92:1.0",
-  "popo-its-base-angles-are-equal": "kokoro:hm_psi:1.05:0.9",
-  "popo-its-base-angles-are-different": "kokoro:hm_psi:1.05:0.9"
+  "narrator-check-the-leg-lengths": "kokoro:hf_alpha:0.92:1.0",
+  "narrator-are-the-legs-equal": "kokoro:hf_alpha:0.92:1.0",
+  "popo-its-legs-are-equal": "kokoro:hm_psi:1.05:0.9",
+  "popo-its-legs-are-different": "kokoro:hm_psi:1.05:0.9",
+  "narrator-catch-the-right-angled-trapeziums": "kokoro:hf_alpha:0.92:1.0"
 }

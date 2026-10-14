@@ -105,10 +105,10 @@ fingertip.
 
 | Level | Place | Instruction | Catches | Fish in the school | Markings | Hint after a wrong catch |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Triangle Bay | Catch all the trapeziums! | 3 | 4, slow | parallel arrows | "Look for parallel sides!" |
-| 2 | Pentagon Cove | Catch the scalene trapeziums! | 3 | 4, slow–moderate | arrows, leg lengths ("5 units") | "Check the leg lengths!" |
-| 3 | Hexagon Pass | Catch the isosceles trapeziums! | 3 | 4, moderate | arrows, matching or different leg ticks | "Are the legs equal?" |
-| 4 | Quadrilateral Waters | Catch the right angle trapeziums! | 3 | 5, moderate | arrows, right-angle squares | "Look for two right angles!" |
+| 1 | Triangle Bay | Catch all the trapeziums! | 3 | 4, slow | none | "Look for parallel sides!" |
+| 2 | Pentagon Cove | Catch the scalene trapeziums! | 3 | 4, slow–moderate | none | "Check the leg lengths!" |
+| 3 | Hexagon Pass | Catch the isosceles trapeziums! | 3 | 4, moderate | none | "Are the legs equal?" |
+| 4 | Quadrilateral Waters | Catch the right-angled trapeziums! | 3 | 5, moderate | none | "Look for two right angles!" |
 | 5 | Far Shore | Catch all the trapeziums! | 4 | 5, moderate | two angle arcs and degrees | "Add the marked angles!", and Popo: "Not a trapezium." "These angles don't add up to 180°!" "Try again!" |
 
 Each level's school holds a couple of fish to catch among distractors; after a catch another
@@ -157,18 +157,16 @@ the line to dangle under the rod tip, a little stream squirting from the hole in
 Swiftee: "Eek!", Popo: "Huh?!", Swiftee: "Good catch, Popo!" They both crack up ("Ha ha ha!"
 "Hee hee hee!"), Popo lets go and the boot drops back in with a splash.
 
-The fish show only degrees (no parallel arrows, lengths or ticks: spotting the shape is the
-learner's job). Level 1 shows nothing; levels 2 and 3 show the two base angles (equal on an
-isosceles trapezium, different on a scalene one); level 4 the two angles on one leg (90° and 90°
-on a right trapezium); level 5 the handoff's angles. Each fish is built from whole-degree angles
-(`byAngles` in `levels.js`), so every number is exact.
+Levels 1 to 4 mark nothing on the fish (no arrows, lengths, ticks, right-angle squares or
+degrees): spotting the shape is the learner's job. Level 5's fish show their two angles. The fish
+of levels 2 to 4 are built from whole-degree base angles (`byAngles` in `levels.js`).
 
-Wrong catches explain themselves: the moment a wrong fish is tapped, a playful "Oops!" card pops
-up over it with the reason in a few words and its own angles (level 1 "No parallel sides!",
-level 2 "Its base angles are equal!" 60° = 60°, level 3 "Its base angles are different!" 52° ≠
-70°, level 4 "No right angles!" 62° and 118°, level 5 "These angles don't add up to 180°!" 95° +
-105° = 200°), while the fish lights up (its angles swell into gold fans, or in level 1 its outline
-glows), and Popo says the reason as he climbs back aboard.
+Wrong catches explain themselves: the moment a wrong fish is tapped, a card in the game's own orange
+button colours pops up over it, pointing at it, with the reason in a few words (level 1 "No parallel sides!", level 2 "Its legs are
+equal!", level 3 "Its legs are different!", level 4 "No right angles!", level 5 "These angles
+don't add up to 180°!" with its own 95° + 105° = 200°), while what gives it away lights up on the
+fish (its legs in levels 2 and 3, its outline in levels 1 and 4, its angles in gold fans in level
+5), and Popo says the reason as he climbs back aboard.
 
 Little extras for fun: three right catches in a row and Popo does a victory dance in a burst of
 bubble confetti; a tap on Swiftee makes her twirl, a tap on the bucket has the last fish caught

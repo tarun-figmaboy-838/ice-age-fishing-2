@@ -68,11 +68,7 @@ CHECK = r'''() => {
         if (a !== Math.round(a)) fail(f.id, `angle ${a} is not whole degrees`);
       });
     } else if (LEVELS[L - 1].marks.includes('angles')) fail(f.id, 'a level that shows angles needs marked corners');
-    if (L === 2 || L === 3) {
-      // the base angles tell isosceles (equal) from scalene (different)
-      if ((f.angles[0] === f.angles[1]) !== c.equalLegs) fail(f.id, 'base angles do not match the legs');
-    }
-    if (L === 4 && f.correct && !(f.angles[0] === 90 && f.angles[1] === 90)) fail(f.id, 'a right trapezium shows its two right angles');
+
     if (L === 3 && f.correct !== (c.kind === 'trapezium' && c.equalLegs)) fail(f.id, 'level 3: catch must have equal legs, distractors unequal');
     if (L === 3 && !f.correct && c.kind !== 'trapezium') fail(f.id, 'level 3 distractor not a trapezium');
     if (L === 4 && f.correct && c.type !== 'right') fail(f.id, 'level 4 catch not a right trapezium');
@@ -99,7 +95,7 @@ CHECK = r'''() => {
       if (m.ticks.map((t) => t.side).sort().join() !== [...c.legs].sort().join()) fail(id, 'ticks not on the legs');
     }
     if (m.squares.map((q) => q.corner).sort().join() !== (marks.includes('right') ? c.right : []).slice().sort().join()) fail(id, 'right-angle squares not exactly on the right angles');
-    if (L_OF(f) < 5 && (m.ticks.length || m.labels.some((l) => l.side !== undefined))) fail(id, 'levels 1 to 4 show only degrees (no lengths or ticks)');
+    if (L_OF(f) < 5 && (m.arrows.length || m.ticks.length || m.squares.length || m.arcs.length || m.labels.length)) fail(id, 'levels 1 to 4 mark nothing');
     if (marks.includes('angles') && m.arcs.map((a) => a.corner).sort().join() !== [...f.corners].sort().join()) fail(id, 'arcs not on the marked corners');
     for (const l of m.labels) {
       if (l.side !== undefined) {
