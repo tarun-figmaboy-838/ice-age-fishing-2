@@ -122,7 +122,6 @@ LINES = [
     ('swiftee', 'You *did* it!', 'Overjoyed.'),
     ('popo', 'Whoopsie Doopsie!', 'Wobbly and embarrassed, then a giggle.'),
     ('popo', '*Great* catch!', 'Delighted and proud.'),
-    ('popo', 'Keep *going!*', 'Cheery and bouncy, egging himself on.'),
     ('popo', 'No *parallel* sides!', 'Dripping wet, pointing out the reason, helpful.'),
     ('popo', 'Its legs are *equal!*', 'Dripping wet, pointing out the reason, helpful.'),
     ('popo', 'Its legs are *different!*', 'Dripping wet, pointing out the reason, helpful.'),

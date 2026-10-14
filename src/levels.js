@@ -152,10 +152,9 @@ const STORY = {
     { who: 'swiftee', text: 'Yay! Shape *detective!*', cue: { word: 0, do: 'recall:cheer' } },
   ],
   observe: [{ who: 'swiftee', text: 'Look at the marked *angles!*', cue: { word: 4, do: 'showAngles' } }],
-  // after a right catch Popo says these in turn
+  // after a right catch Popo says this
   right: [
     { who: 'popo', text: '*Great* catch!', cue: { word: 0, do: 'hop' } },
-    { who: 'popo', text: 'Keep *going!*', cue: { word: 1, do: 'hop' } },
   ],
   wrong: { who: 'popo', text: 'Whoopsie Doopsie!' },
   wow: [

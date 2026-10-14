@@ -94,7 +94,7 @@ stroke (part 1's rowing).
 Tap a fish and Popo casts: the hook flies into its mouth. A right fish is reeled in fighting the
 line (less as it tires; fish in the way dart clear), bursts out of the water, swings up on the line
 high over Popo's head and drops into the bucket behind its rim; the empty hook springs back to
-the rod and Popo says "Great catch!" or "Keep going!" (in turn); a wrong one pulls Popo in (the wrong-answer
+the rod and Popo says "Great catch!"; a wrong one pulls Popo in (the wrong-answer
 reaction below), then the instruction shows the level's hint and the narrator reads it. Every
 line is the handoff's wording, voiced, and shown word by word in time with the voice, with a boing
 on the stressed word; longer lines are split into short comic beats (one quick bubble each, with a
@@ -161,8 +161,8 @@ Levels 1 to 4 mark nothing on the fish (no arrows, lengths, ticks, right-angle s
 degrees): spotting the shape is the learner's job. Level 5's fish show their two angles. The fish
 of levels 2 to 4 are built from whole-degree base angles (`byAngles` in `levels.js`).
 
-Wrong catches explain themselves: the moment a wrong fish is tapped, a white card with the reason in
-the game's orange pops up over it, pointing at it, with the reason in a few words (level 1 "No parallel sides!", level 2 "Its legs are
+Wrong catches explain themselves: the moment a wrong fish is tapped, a white card pops up over it,
+pointing at it, with the reason (its key word in the game's orange, as in the instruction) with the reason in a few words (level 1 "No parallel sides!", level 2 "Its legs are
 equal!", level 3 "Its legs are different!", level 4 "No right angles!", level 5 "These angles
 don't add up to 180°!" with its own 95° + 105° = 200°), while what gives it away lights up on the
 fish (its legs in levels 2 and 3, its outline in levels 1 and 4, its angles in gold fans in level
@@ -231,7 +231,7 @@ Python Playwright with its Chromium (`pip install playwright && playwright insta
 ## Voice-overs
 
 All 36 lines part 2 can say (the story, each level's instruction and hint, Popo's right- and
-wrong-catch lines, "Great catch!" and "Keep going!", and the big-catch gag) are recorded with Kokoro in part 1's
+wrong-catch lines, "Great catch!", and the big-catch gag) are recorded with Kokoro in part 1's
 voices; `LINES` in `tools/build-voice.py` lists them, and symbols are read as words ("70° + 110° =
 180°" as "70 degrees plus 110 degrees equals 180 degrees"). Each word appears as it is spoken and
 the recall card's steps follow the voice. `python3 tests/voice.py` checks that every line the game

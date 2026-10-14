@@ -1986,11 +1986,11 @@ class Game {
     const level = this.level();
     if (!level.why) return;
     const [a, b] = fish.spec.angles || [];
-    const detail = level.compare === 'sum' && a !== undefined ? `${a}° + ${b}° = ${a + b}°` : '';
+    const detail = level.compare === 'sum' && a !== undefined ? `${a}° + ${b}° = *${a + b}°*` : '';
     const marked = fish.marksFor && fish.marksFor(ShapeFish.labelFont).arcs.length > 0;
     if (marked) fish.showMarks(1.15);
     const legs = !marked && level.glow === 'legs' ? geometry.classify(fish.spec.body).legs : null;
-    this.why = { fish, text: level.why.replace(/\*/g, ''), detail, outline: !marked, legs, t: 0, out: 0 };
+    this.why = { fish, text: level.why, detail, outline: !marked, legs, t: 0, out: 0 };
     this.audio.play('nope');
   }
 
@@ -2047,10 +2047,23 @@ class Game {
     // with the reason in orange, its pointer part of the same outline
     ctx.save();
     const font = (weight, size) => `${weight} ${size}px Fredoka, "Arial Rounded MT Bold", system-ui, sans-serif`;
+    // a line in runs: dark brown, its *stressed* words in the game's orange (as in the instruction)
+    const runs = (text) => text.split(/(\*[^*]+\*)/).filter(Boolean).map((part) => ({ text: part.replace(/\*/g, ''), em: part.startsWith('*') }));
+    const width = (parts) => parts.reduce((sum, p) => sum + ctx.measureText(p.text).width, 0);
+    const say = (parts, y) => {
+      let x = -width(parts) / 2;
+      for (const p of parts) {
+        ctx.fillStyle = p.em ? '#e8590c' : '#3b1d00';
+        ctx.fillText(p.text, x, y);
+        x += ctx.measureText(p.text).width;
+      }
+    };
+    const line = runs(w.text);
+    const extra = w.detail ? runs(w.detail) : null;
     ctx.font = font(700, 33);
-    const tw = ctx.measureText(w.text).width;
+    const tw = width(line);
     ctx.font = font(700, 29);
-    const dw = w.detail ? ctx.measureText(w.detail).width : 0;
+    const dw = extra ? width(extra) : 0;
     const W = Math.max(tw, dw) + 52;
     const H = w.detail ? 100 : 72;
     const half = (f.h * f.scale * (f.zoom || 1)) / 2;
@@ -2106,22 +2119,20 @@ class Game {
     ctx.translate(0, 7);
     ctx.fill();
     ctx.restore();
-    // white inside, a dark brown edge, the reason in the game's orange
+    // white inside, a dark brown edge
     ctx.fillStyle = '#ffffff';
     ctx.fill();
     ctx.lineWidth = 4.5;
     ctx.strokeStyle = '#3b1d00';
     ctx.stroke();
     // the reason, and in level 5 the fish's own angles
-    ctx.textAlign = 'center';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#e8590c';
     ctx.font = font(700, 33);
-    ctx.fillText(w.text, 0, w.detail ? -15 : 3);
-    if (w.detail) {
+    say(line, extra ? -15 : 3);
+    if (extra) {
       ctx.font = font(700, 29);
-      ctx.fillStyle = '#c4501a';
-      ctx.fillText(w.detail, 0, 25);
+      say(extra, 25);
     }
     ctx.restore();
   }

@@ -157,7 +157,7 @@ async function correctCatch(game, fish) {
       game.cheer();
       clock.wait(380, token).then(() => game.storyCue('hop')).catch(() => {});
     }
-    // "Great catch!" and "Keep going!" in turn
+    // "Great catch!"
     await game.say(STORY.right[(state.collected.length - 1) % STORY.right.length], token);
     game.afterCatch();
   } catch (e) {
